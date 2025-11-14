@@ -1,8 +1,8 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { doc, onSnapshot } from 'firebase/firestore'
-import React, { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { Search, Plus, Calendar, MapPin, Users, DollarSign, Edit2, Trash2, User, Settings, LogOut, Bell } from 'lucide-react'
+
 import { db, auth } from '../lib/firebase.ts'
 
 interface VoyageBoardMember {
