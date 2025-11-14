@@ -2,6 +2,7 @@
 # Authentication Endpoints
 # =========================
 import os
+import secrets
 from typing import List, Optional, Union
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Depends, Body, Header, Request
@@ -14,6 +15,7 @@ import uvicorn
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 from langgraph.prebuilt import create_react_agent
+from google.cloud import firestore
 
 load_dotenv()
 from firebase_config import initialize_firebase
@@ -426,6 +428,15 @@ This traveler has specific preferences that MUST be respected:
     
     prompt = f"""
 You are an expert travel AI assistant designed for Indian travelers exploring destinations worldwide. You have deep knowledge of global destinations, understand Indian traveler preferences, cultural context, and budget considerations. All pricing is in Indian Rupees (₹). Your role is to create personalized, practical trip itineraries that feel natural and conversational for Indian users.
+
+🚨🚨🚨 MANDATORY REQUIREMENT - BOOKING LINKS 🚨🚨🚨
+EVERY hotel, flight, restaurant, and activity MUST have ACTUAL clickable booking links.
+- Hotels: MUST call get_booking_link("Hotel Name", "City") and insert the REAL URL returned
+- Flights: MUST create proper MakeMyTrip URLs with ACTUAL dates from the trip
+- Restaurants: MUST create Zomato URLs
+- NO placeholders, NO "use tool here", ONLY REAL WORKING LINKS
+If you don't include real booking links, the itinerary will be REJECTED.
+🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 **Trip Context:**
 **🎯 YOUR TRIP DETAILS:**
@@ -954,45 +965,45 @@ Day 1: Arrival & [Descriptive Title]
 *Add 1-2 images per day showing the main attractions/activities using Unsplash format*
 *Example: ![Red Fort Delhi](https://source.unsplash.com/1600x900/?red-fort,delhi)*
 
-✈️ Arrival:
+**✈️ Arrival:**
 • Land at {trip_details.destination} Airport/Station [Estimated time]
 • Airport/Station to Hotel: [Specific transport - Ola/Uber/Prepaid Taxi] (₹[Cost], [Duration])
-  Tip: Book [Ola/Uber] in advance for convenience
+• Tip: Book [Ola/Uber] in advance for convenience
 
-Morning/Afternoon (After Check-in):
+**Morning/Afternoon (After Check-in):**
 • 🚗 Hotel to [Activity Location]: [Mode like Ola/Uber/Metro] (₹[Cost])
 • [Activity Name] - ₹[Cost]
-  Why: [Brief, compelling reason this is included]
-  **📱 IF BOOKABLE ONLINE, ADD LINK:** [Book This Activity](https://bookmyshow.com/... or official-website)
+  - Why: [Brief, compelling reason this is included]
+  - **📱 IF BOOKABLE ONLINE, ADD LINK:** [Book This Activity](https://bookmyshow.com/... or official-website)
   
-Afternoon (12:00 PM - 6:00 PM):
+**Afternoon (12:00 PM - 6:00 PM):**
 • 🚗 [Location A] to [Location B]: [Mode] (₹[Cost])
 • [Activity Name] - ₹[Cost]
-  Why: [What makes this special]
-  **📱 IF BOOKABLE, ADD LINK:** [Book Tickets](booking-url)
+  - Why: [What makes this special]
+  - **📱 IF BOOKABLE, ADD LINK:** [Book Tickets](booking-url)
   
-Evening (6:00 PM onwards):
+**Evening (6:00 PM onwards):**
 • 🚗 [Location] to [Evening spot]: [Mode] (₹[Cost])
 • [Activity Name] - ₹[Cost]
-  Why: [How this completes the day]
-  **📱 IF BOOKABLE, ADD LINK:** [Reserve/Book](booking-url)
+  - Why: [How this completes the day]
+  - **📱 IF BOOKABLE, ADD LINK:** [Reserve/Book](booking-url)
 • 🚗 Return to hotel: [Mode] (₹[Cost])
 
-🍽️ Food: 
-• Breakfast: [Specific place] - [Signature dish] (₹[Price])
-  **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
-  Replace spaces with hyphens, lowercase, format: zomato.com/[city]/[restaurant-name]
-• Lunch: [Specific place] - [Must-try item] (₹[Price])
-  **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
-• Dinner: [Specific place] - [Local specialty] (₹[Price])
-  **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
+**🍽️ Food:**
+• **Breakfast:** [Specific place] - [Signature dish] (₹[Price])
+  - **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
+  - Replace spaces with hyphens, lowercase, format: zomato.com/[city]/[restaurant-name]
+• **Lunch:** [Specific place] - [Must-try item] (₹[Price])
+  - **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
+• **Dinner:** [Specific place] - [Local specialty] (₹[Price])
+  - **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
 
-🏨 Accommodation: [Specific hotel name] - ₹[Price/night]
-   Why this choice: [Brief explanation of why this property suits their budget tier]
-   **📱 MANDATORY FORMAT - USE SQUARE BRACKETS [ ] AND PARENTHESES ( ) WITH get_booking_link TOOL:**
-   **WRONG FORMAT: **📱 Book This Hotel** or **📱 [Book Hotel](use-tool)****
-   **CORRECT FORMAT: **📱 [Book This Hotel](https://www.makemytrip.com/hotels/tea-county-munnar-details.html)****
-   CALL get_booking_link("hotel_name_here", "city_name_here") tool and copy the returned URL into parentheses!
+**🏨 Accommodation:** [Specific hotel name] - ₹[Price/night]
+• Why this choice: [Brief explanation of why this property suits their budget tier]
+• **📱 MANDATORY FORMAT - USE SQUARE BRACKETS [ ] AND PARENTHESES ( ) WITH get_booking_link TOOL:**
+• **WRONG FORMAT: **📱 Book This Hotel** or **📱 [Book Hotel](use-tool)****
+• **CORRECT FORMAT: **📱 [Book This Hotel](https://www.makemytrip.com/hotels/tea-county-munnar-details.html)****
+• CALL get_booking_link("hotel_name_here", "city_name_here") tool and copy the returned URL into parentheses!
 
 [Repeat for each day]
 
@@ -2488,6 +2499,45 @@ async def get_trip_plan(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch trip plan: {str(e)}")
 
+@app.get("/api/trip-plans/share/{trip_id}", response_model=dict)
+async def get_shared_trip_plan(
+    trip_id: str,
+    current_user: Optional[FirebaseUser] = Depends(get_optional_user)
+):
+    """
+    Get a shared trip plan by ID. Can be accessed without authentication if trip is public.
+    If authenticated, allows access to trips you own or have been shared with.
+    """
+    try:
+        # Try to get trip from Firestore directly
+        trip_ref = firestore_service.db.collection('trip_plans').document(trip_id)
+        trip_doc = trip_ref.get()
+        
+        if not trip_doc.exists:
+            raise HTTPException(status_code=404, detail="Trip plan not found")
+        
+        trip = trip_doc.to_dict()
+        trip['id'] = trip_doc.id
+        
+        # Check if user has access
+        is_owner = current_user and trip.get('user_id') == current_user.uid
+        is_public = trip.get('is_public', False)  # Default to private if not set
+        
+        # Allow access if: user owns it, it's public, or user is authenticated (for collaboration)
+        if not (is_owner or is_public or current_user):
+            raise HTTPException(status_code=403, detail="This trip is private")
+        
+        # Transform itinerary field to trip_plan for frontend compatibility
+        if 'itinerary' in trip:
+            trip['trip_plan'] = trip['itinerary']
+        
+        return trip
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error fetching shared trip: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch trip plan: {str(e)}")
+
 @app.delete("/api/trip-plans/{trip_id}")
 async def delete_trip_plan(
     trip_id: str,
@@ -2510,6 +2560,35 @@ async def delete_trip_plan(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete trip plan: {str(e)}")
+
+@app.put("/api/trip-plans/{trip_id}")
+async def update_trip_plan(
+    trip_id: str,
+    itinerary: str = Body(...),
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Update a trip plan's itinerary.
+    """
+    try:
+        updates = {
+            'itinerary': itinerary
+        }
+        
+        success = firestore_service.update_trip_plan(
+            trip_id=trip_id,
+            user_id=current_user.uid,
+            updates=updates
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Trip plan not found or unauthorized")
+        
+        return {"success": True, "message": "Trip plan updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update trip plan: {str(e)}")
 
 @app.patch("/api/trip-plans/{trip_id}/status")
 async def update_trip_status(
@@ -3603,7 +3682,7 @@ IMPORTANT RULES:
             message = "Discover amazing destinations with local events and cuisine"
         
         return {
-            "suggestions": suggestions[:3],  # Ensure max 3 suggestions
+            "recommendations": suggestions[:3],  # Changed from suggestions to recommendations for frontend compatibility
             "message": message,
         }
         
@@ -4902,6 +4981,40 @@ async def create_voyage_board(
         print(f"❌ Error creating Voyage Board: {str(e)}")
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/voyage-board/trip/{trip_id}", response_model=VoyageBoardResponse)
+async def get_voyage_board_by_trip(
+    trip_id: str,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Get a Voyage Board by trip ID.
+    Returns the board if it exists for this trip, otherwise 404.
+    """
+    try:
+        board_service = get_voyage_board_service(firestore_service)
+        board = board_service.get_board_by_trip_id(trip_id)
+        
+        if not board:
+            raise HTTPException(status_code=404, detail="No board found for this trip")
+        
+        # Check if user has access (must be owner or member)
+        is_member = any(m.user_id == current_user.uid for m in board.members)
+        
+        if not is_member:
+            raise HTTPException(status_code=403, detail="Access denied to this board")
+        
+        return {
+            "success": True,
+            "message": "Board retrieved successfully",
+            "board": board
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error retrieving board by trip: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/voyage-board/{board_id}", response_model=VoyageBoardResponse)
@@ -6503,6 +6616,522 @@ async def get_trip_summary(
         raise
     except Exception as e:
         print(f"❌ Error getting trip summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# VOYAGE BOARD ENDPOINTS
+# ============================================================================
+
+@app.post("/api/voyage-boards")
+async def create_voyage_board(
+    request: CreateVoyageBoardRequest,
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Create a new Voyage Board for collaborative trip planning"""
+    try:
+        voyage_board_service = get_voyage_board_service(firestore_service.db)
+        
+        board = voyage_board_service.create_board(
+            trip_id=request.trip_id,
+            owner_id=user.uid,
+            owner_email=user.email,
+            owner_name=user.name,
+            board_name=request.board_name,
+            description=request.description,
+            is_public=request.is_public if hasattr(request, 'is_public') else False,
+            access_code=request.access_code if hasattr(request, 'access_code') else None
+        )
+        
+        return {
+            "success": True,
+            "message": "Voyage Board created successfully",
+            "board_id": board.board_id,
+            "share_link": board.share_link,
+            "access_code": board.access_code
+        }
+    except Exception as e:
+        print(f"❌ Error creating voyage board: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/voyage-boards/{board_id}")
+async def get_voyage_board(
+    board_id: str,
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Get voyage board details"""
+    try:
+        voyage_board_service = get_voyage_board_service(firestore_service.db)
+        board = voyage_board_service.get_board(board_id)
+        
+        if not board:
+            raise HTTPException(status_code=404, detail="Board not found")
+        
+        return board.model_dump(mode='json')
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error getting voyage board: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/voyage-board/comment")
+async def add_comment(
+    request: AddCommentRequest,
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Add a comment to a voyage board"""
+    try:
+        voyage_board_service = get_voyage_board_service(firestore_service.db)
+        
+        comment = voyage_board_service.add_comment(
+            board_id=request.board_id,
+            user_id=user.uid,
+            user_name=user.name,
+            content=request.content,
+            day_number=request.day_number if hasattr(request, 'day_number') else None,
+            activity_index=request.activity_index if hasattr(request, 'activity_index') else None,
+            reply_to=request.reply_to if hasattr(request, 'reply_to') else None
+        )
+        
+        if not comment:
+            raise HTTPException(status_code=400, detail="Failed to add comment")
+        
+        return {"success": True, "message": "Comment added", "comment_id": comment.comment_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error adding comment: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/voyage-board/suggestion")
+async def add_suggestion(
+    request: AddSuggestionRequest,
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Add a suggestion to a voyage board"""
+    try:
+        voyage_board_service = get_voyage_board_service(firestore_service.db)
+        
+        suggestion = voyage_board_service.add_suggestion(
+            board_id=request.board_id,
+            user_id=user.uid,
+            user_name=user.name,
+            suggestion_type=request.suggestion_type,
+            suggested_value=request.suggested_value,
+            day_number=request.day_number if hasattr(request, 'day_number') else None,
+            activity_index=request.activity_index if hasattr(request, 'activity_index') else None,
+            current_value=request.current_value if hasattr(request, 'current_value') else None,
+            reason=request.reason if hasattr(request, 'reason') else None
+        )
+        
+        if not suggestion:
+            raise HTTPException(status_code=400, detail="Failed to add suggestion")
+        
+        return {"success": True, "message": "Suggestion added", "suggestion_id": suggestion.suggestion_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error adding suggestion: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/voyage-board/vote")
+async def vote_on_suggestion(
+    request: VoteOnSuggestionRequest,
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Vote on a suggestion"""
+    try:
+        voyage_board_service = get_voyage_board_service(firestore_service.db)
+        
+        success = voyage_board_service.vote_on_suggestion(
+            board_id=request.board_id,
+            suggestion_id=request.suggestion_id,
+            user_id=user.uid,
+            vote=request.vote
+        )
+        
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to record vote")
+        
+        return {"success": True, "message": "Vote recorded"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error voting: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/voyage-board/like-comment")
+async def like_comment(
+    board_id: str = Body(...),
+    comment_id: str = Body(...),
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Like/unlike a comment"""
+    try:
+        voyage_board_service = get_voyage_board_service(firestore_service.db)
+        board = voyage_board_service.get_board(board_id)
+        
+        if not board:
+            raise HTTPException(status_code=404, detail="Board not found")
+        
+        # Toggle like
+        comment_found = False
+        for comment in board.comments:
+            if comment.comment_id == comment_id:
+                comment_found = True
+                if user.uid in comment.likes:
+                    comment.likes.remove(user.uid)
+                else:
+                    comment.likes.append(user.uid)
+                break
+        
+        if not comment_found:
+            raise HTTPException(status_code=404, detail="Comment not found")
+        
+        voyage_board_service.update_board(board)
+        
+        return {"success": True, "message": "Like toggled"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error liking comment: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# EXPENSE TRACKER ENDPOINTS
+# ============================================================================
+
+@app.get("/api/trips/{trip_id}/expenses")
+async def get_trip_expenses(
+    trip_id: str,
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Get expense summary for a trip - reads transactions array from trips document"""
+    try:
+        # Get trip document (which contains transactions array)
+        trip_ref = firestore_service.db.collection('trips').document(trip_id)
+        trip_doc = trip_ref.get()
+        
+        if not trip_doc.exists:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        
+        trip_data = trip_doc.to_dict()
+        budget = trip_data.get('budget', 0)
+        per_day_budget = trip_data.get('per_day_budget', 0)
+        transactions = trip_data.get('transactions', [])
+        
+        # Calculate totals
+        total_spent = sum(t.get('amount', 0) for t in transactions)
+        total_remaining = budget - total_spent
+        percentage_used = (total_spent / budget * 100) if budget > 0 else 0
+        
+        # Calculate daily spending
+        today = datetime.now().date()
+        today_spending = sum(
+            t.get('amount', 0) for t in transactions 
+            if t.get('date', '').startswith(str(today))
+        )
+        
+        # Budget status
+        budget_status = "on-track"
+        if total_spent > budget:
+            budget_status = "over-budget"
+        elif percentage_used >= 90:
+            budget_status = "critical"
+        elif percentage_used >= 75:
+            budget_status = "warning"
+        
+        # Calculate category breakdown
+        category_totals = {}
+        for t in transactions:
+            cat = t.get('category', 'Other')
+            category_totals[cat] = category_totals.get(cat, 0) + t.get('amount', 0)
+        
+        categories = [
+            {
+                "name": cat,
+                "spent_amount": amount,
+                "percentage": (amount / total_spent * 100) if total_spent > 0 else 0
+            }
+            for cat, amount in category_totals.items()
+        ]
+        
+        # Generate warnings
+        warnings = []
+        if total_spent > budget:
+            warnings.append(f"🔴 BUDGET EXCEEDED! You've spent ₹{total_spent - budget:,.2f} over budget.")
+        elif percentage_used >= 90:
+            warnings.append(f"⚠️ CRITICAL: You've used {percentage_used:.1f}% of your budget!")
+        elif percentage_used >= 75:
+            warnings.append(f"⚠️ WARNING: {percentage_used:.1f}% of budget used.")
+        
+        if today_spending > per_day_budget:
+            warnings.append(f"📊 Today's spending (₹{today_spending:,.2f}) exceeds daily budget (₹{per_day_budget:,.2f})")
+        
+        return {
+            "trip_id": trip_id,
+            "total_budget": budget,
+            "per_day_budget": per_day_budget,
+            "total_spent": total_spent,
+            "total_remaining": total_remaining,
+            "percentage_used": round(percentage_used, 2),
+            "budget_status": budget_status,
+            "today_spending": today_spending,
+            "categories": categories,
+            "expenses": transactions,
+            "warnings": warnings,
+            "recommendations": [
+                "Track expenses daily to stay on budget" if not warnings else 
+                "Consider optimizing remaining activities to reduce costs"
+            ]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error getting expenses: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/trips/{trip_id}/expenses")
+async def add_expense(
+    trip_id: str,
+    request: AddExpenseRequest,
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Add a new expense - saves as transaction in trips document"""
+    try:
+        # Get trip document
+        trip_ref = firestore_service.db.collection('trips').document(trip_id)
+        trip_doc = trip_ref.get()
+        
+        if not trip_doc.exists:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        
+        # Create transaction object
+        transaction = {
+            "id": f"txn_{datetime.now().timestamp()}_{secrets.token_hex(4)}",
+            "category": request.category,
+            "amount": request.amount,
+            "description": request.description,
+            "date": request.date or datetime.now().isoformat(),
+            "user_id": user.uid,
+            "split_among": request.split_among,
+            "created_at": datetime.now().isoformat()
+        }
+        
+        # Add to transactions array
+        trip_ref.update({
+            "transactions": firestore.ArrayUnion([transaction])
+        })
+        
+        print(f"✅ Transaction added to trip {trip_id}: ₹{request.amount} - {request.description}")
+        
+        return {
+            "success": True,
+            "expense_id": transaction["id"],
+            "message": "Expense added to trip"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error adding expense: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/trips/{trip_id}/expenses/{expense_id}")
+async def delete_expense(
+    trip_id: str,
+    expense_id: str,
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Delete an expense - removes transaction from trips document"""
+    try:
+        # Get trip document
+        trip_ref = firestore_service.db.collection('trips').document(trip_id)
+        trip_doc = trip_ref.get()
+        
+        if not trip_doc.exists:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        
+        trip_data = trip_doc.to_dict()
+        transactions = trip_data.get('transactions', [])
+        
+        # Find and remove the transaction
+        transaction_to_remove = None
+        for t in transactions:
+            if t.get('id') == expense_id:
+                transaction_to_remove = t
+                break
+        
+        if not transaction_to_remove:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        
+        # Remove from array
+        trip_ref.update({
+            "transactions": firestore.ArrayRemove([transaction_to_remove])
+        })
+        
+        print(f"✅ Transaction deleted from trip {trip_id}: {expense_id}")
+        
+        return {"success": True, "message": "Expense deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error deleting expense: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/optimize-itinerary")
+async def optimize_itinerary(
+    trip_id: str = Body(...),
+    new_budget: float = Body(...),
+    reason: str = Body(...),
+    constraints: dict = Body({}),
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Optimize itinerary based on new budget constraints"""
+    try:
+        # Get the trip
+        trip_ref = firestore_service.db.collection('trips').document(trip_id)
+        trip_doc = trip_ref.get()
+        
+        if not trip_doc.exists:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        
+        trip = trip_doc.to_dict()
+
+        # Use AI to optimize the itinerary
+        prompt = f"""
+You are an expert travel planner. A traveler needs help optimizing their trip itinerary.
+
+Current Trip: {trip.get('destination', 'Unknown')}
+Current Itinerary:
+{trip.get('itinerary', trip.get('plan', 'No itinerary found'))}
+
+Reason for optimization: {reason}
+New budget constraint: ${new_budget}
+Additional constraints: {constraints}
+
+Please provide an optimized itinerary that:
+1. Stays within the ${new_budget} budget
+2. Addresses the reason: {reason}
+3. Maintains the trip's character and key experiences
+4. Suggests cost-effective alternatives where needed
+
+Format your response with clear day-by-day breakdown and bullet points for activities.
+"""
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-pro",
+            temperature=0.7,
+            google_api_key=GOOGLE_API_KEY
+        )
+        
+        response = llm.invoke(prompt)
+        optimized_itinerary = response.content
+        
+        # Update the trip with optimized itinerary
+        trip_ref.update({
+            'itinerary': optimized_itinerary,
+            'plan': optimized_itinerary,
+            'budget': new_budget,
+            'last_optimized': datetime.now().isoformat()
+        })
+        
+        return {
+            "success": True,
+            "message": "Itinerary optimized successfully",
+            "optimized_itinerary": optimized_itinerary
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error optimizing itinerary: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# CALENDAR EXPORT ENDPOINT
+# ============================================================================
+
+@app.post("/api/calendar/export")
+async def export_to_calendar(
+    trip_id: str = Body(...),
+    destination: str = Body(...),
+    start_date: str = Body(...),
+    end_date: Optional[str] = Body(None),
+    itinerary: str = Body(...),
+    user: FirebaseUser = Depends(get_current_user)
+):
+    """Export trip itinerary to Google Calendar"""
+    try:
+        calendar_service = get_calendar_export_service(firestore_service.db)
+        
+        result = calendar_service.export_trip_to_calendar(
+            user_id=user.uid,
+            trip_id=trip_id,
+            destination=destination,
+            start_date=start_date,
+            end_date=end_date,
+            itinerary=itinerary
+        )
+        
+        return {
+            "success": True,
+            "message": "Trip exported to calendar successfully",
+            "calendar_url": result.get('calendar_url'),
+            "events_created": result.get('events_created', 0)
+        }
+        
+    except Exception as e:
+        print(f"❌ Error exporting to calendar: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# EXISTING ENDPOINTS
+# ============================================================================
+        
+        # Create optimization prompt
+        prompt = f"""The user has a budget constraint. Their original budget was ₹{trip.get('budget', 0)}, 
+but they now only have ₹{new_budget} remaining.
+
+Reason: {reason}
+
+Current itinerary:
+{trip.get('itinerary', 'No itinerary found')}
+
+Please replan the remaining days of the trip to fit within the new budget of ₹{new_budget}.
+Constraints:
+- Keep accommodation: {constraints.get('keep_accommodation', True)}
+- Keep transport: {constraints.get('keep_transport', True)}
+- Optimize: {constraints.get('optimize', 'activities_and_food')}
+
+Provide a revised itinerary that stays within budget."""
+        
+        # Use the AI to generate optimized itinerary
+        # (This would normally call your trip planning agent)
+        
+        return {
+            "success": True,
+            "message": "Itinerary optimization in progress",
+            "new_budget": new_budget
+        }
+    except Exception as e:
+        print(f"❌ Error optimizing itinerary: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================

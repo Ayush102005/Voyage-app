@@ -174,6 +174,54 @@ class VoyageBoardService:
         
         return VoyageBoard(**board_data)
     
+    def get_board_by_trip_id(self, trip_id: str) -> Optional[VoyageBoard]:
+        """
+        Get a board by trip_id (since one trip can have one board)
+        """
+        boards_ref = self.firestore.db.collection(self.collection)
+        query = boards_ref.where('trip_id', '==', trip_id).limit(1)
+        docs = query.stream()
+        
+        for doc in docs:
+            board_data = doc.to_dict()
+            
+            # Helper function to convert datetime
+            def to_datetime(value):
+                if value is None:
+                    return None
+                if isinstance(value, datetime):
+                    return value
+                if isinstance(value, str):
+                    return datetime.fromisoformat(value)
+                return value
+            
+            # Convert datetime fields
+            board_data['created_at'] = to_datetime(board_data['created_at'])
+            board_data['updated_at'] = to_datetime(board_data['updated_at'])
+            
+            # Convert member timestamps
+            for member in board_data.get('members', []):
+                member['joined_at'] = to_datetime(member['joined_at'])
+                member['last_seen'] = to_datetime(member['last_seen'])
+            
+            # Convert comments
+            for comment in board_data.get('comments', []):
+                comment['created_at'] = to_datetime(comment['created_at'])
+            
+            # Convert suggestions
+            for suggestion in board_data.get('suggestions', []):
+                suggestion['created_at'] = to_datetime(suggestion['created_at'])
+                if suggestion.get('resolved_at'):
+                    suggestion['resolved_at'] = to_datetime(suggestion['resolved_at'])
+            
+            # Convert polls
+            for poll in board_data.get('polls', []):
+                poll['created_at'] = to_datetime(poll['created_at'])
+            
+            return VoyageBoard(**board_data)
+        
+        return None
+    
     def update_board(self, board: VoyageBoard) -> bool:
         """
         Update a Voyage Board in Firestore

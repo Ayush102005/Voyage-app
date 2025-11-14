@@ -134,13 +134,13 @@ const ProfileQuizPage = () => {
             {[1, 2, 3].map((s) => (
               <div key={s} className="flex items-center flex-1">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
-                  step >= s ? 'bg-red-600 text-white' : 'bg-neutral-800 text-neutral-500'
+                  step >= s ? 'bg-[#57A5B8] text-white' : 'bg-neutral-800 text-neutral-500'
                 }`}>
                   {s}
                 </div>
                 {s < 3 && (
                   <div className={`flex-1 h-1 mx-2 transition-all ${
-                    step > s ? 'bg-red-600' : 'bg-neutral-800'
+                    step > s ? 'bg-[#57A5B8]' : 'bg-neutral-800'
                   }`} />
                 )}
               </div>
@@ -159,8 +159,8 @@ const ProfileQuizPage = () => {
                   onClick={() => setFormData({ ...formData, travelStyle: style.id })}
                   className={`p-6 rounded-xl border-2 transition-all text-left ${
                     formData.travelStyle === style.id
-                      ? 'border-red-600 bg-red-600/10 scale-105 shadow-xl shadow-red-600/50'
-                      : 'border-neutral-800 bg-neutral-900 hover:border-red-600/50'
+                      ? 'border-[#57A5B8] bg-[#57A5B8]/10 scale-105 shadow-xl shadow-[#57A5B8]/50'
+                      : 'border-neutral-800 bg-neutral-900 hover:border-[#57A5B8]/50'
                   }`}
                 >
                   <div className="text-5xl mb-4">{style.emoji}</div>
@@ -195,8 +195,8 @@ const ProfileQuizPage = () => {
                     onClick={() => toggleInterest(interest.id)}
                     className={`p-6 rounded-xl border-2 transition-all ${
                       isSelected
-                        ? 'border-red-600 bg-red-600/10'
-                        : 'border-neutral-800 bg-neutral-900 hover:border-red-600/50'
+                        ? 'border-[#57A5B8] bg-[#57A5B8]/10'
+                        : 'border-neutral-800 bg-neutral-900 hover:border-[#57A5B8]/50'
                     }`}
                   >
                     <div className="text-4xl mb-3">{interest.emoji}</div>
@@ -232,8 +232,8 @@ const ProfileQuizPage = () => {
                   onClick={() => setFormData({ ...formData, budgetPreference: budget.id })}
                   className={`p-6 rounded-xl border-2 transition-all ${
                     formData.budgetPreference === budget.id
-                      ? 'border-red-600 bg-red-600/10 scale-105'
-                      : 'border-neutral-800 bg-neutral-900 hover:border-red-600/50'
+                      ? 'border-[#57A5B8] bg-[#57A5B8]/10 scale-105'
+                      : 'border-neutral-800 bg-neutral-900 hover:border-[#57A5B8]/50'
                   }`}
                 >
                   <h3 className="text-xl font-bold mb-2">{budget.label}</h3>

@@ -1,18 +1,3 @@
-def verify_firebase_token(token: str):
-    """
-    Synchronously verify a Firebase ID token and return user info dict.
-    Returns None if invalid.
-    """
-    try:
-        decoded_token = auth.verify_id_token(token)
-        return {
-            "uid": decoded_token.get("uid"),
-            "email": decoded_token.get("email", "unknown@example.com"),
-            "name": decoded_token.get("name", "")
-        }
-    except Exception as e:
-        print(f"Firebase token verification failed: {e}")
-        return None
 """
 Firebase Authentication utilities for FastAPI
 """

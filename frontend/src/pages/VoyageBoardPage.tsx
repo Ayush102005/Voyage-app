@@ -1,9 +1,9 @@
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { doc, onSnapshot } from 'firebase/firestore'
 import React, { useState, useEffect, useMemo } from 'react'
 import toast from 'react-hot-toast'
 import { Search, Plus, Calendar, MapPin, Users, DollarSign, Edit2, Trash2, User, Settings, LogOut, Bell } from 'lucide-react'
-import { db } from '../lib/firebase.ts'
+import { db, auth } from '../lib/firebase.ts'
 
 interface VoyageBoardMember {
   user_id: string
@@ -65,6 +65,7 @@ interface VoyageBoard {
 const VoyageBoardPage = () => {
   const { boardId } = useParams<{ boardId: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [board, setBoard] = useState<VoyageBoard | null>(null)
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
@@ -77,6 +78,18 @@ const VoyageBoardPage = () => {
     day_number: null as number | null
   })
 
+  // Check URL parameters for initial tab
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab === 'vote' || tab === 'suggestions') {
+      setActiveTab('suggestions')
+    } else if (tab === 'discuss' || tab === 'comments') {
+      setActiveTab('comments')
+    } else if (tab === 'activity') {
+      setActiveTab('activity')
+    }
+  }, [searchParams])
+
   // Real-time listener for board updates
   useEffect(() => {
     if (!boardId) return
@@ -85,13 +98,16 @@ const VoyageBoardPage = () => {
     
     const unsubscribe = onSnapshot(boardRef, (doc) => {
       if (doc.exists()) {
+        console.log('✅ Board found:', doc.id)
         setBoard(doc.data() as VoyageBoard)
         setLoading(false)
       } else {
+        console.warn('⚠️ Board document not found:', boardId)
         setLoading(false)
       }
     }, (error) => {
-      console.error('Error listening to board:', error)
+      console.error('❌ Error listening to board:', error)
+      toast.error('Failed to load Voyage Board: ' + error.message)
       setLoading(false)
     })
 
@@ -101,49 +117,65 @@ const VoyageBoardPage = () => {
   const handleAddComment = async () => {
     if (!newComment.trim() || !board) return
 
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const firebaseUser = auth.currentUser
+    if (!firebaseUser) {
+      toast.error('Please login to add comments')
+      return
+    }
     
     try {
+      const token = await firebaseUser.getIdToken()
+      
       const response = await fetch('http://localhost:8000/api/voyage-board/comment', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           board_id: boardId,
-          user_id: user.uid,
-          user_name: user.displayName || user.email,
+          user_id: firebaseUser.uid,
+          user_name: firebaseUser.displayName || firebaseUser.email || 'Anonymous',
           content: newComment,
           day_number: selectedDay,
-          user_avatar: user.photoURL
+          user_avatar: firebaseUser.photoURL
         })
       })
 
       if (response.ok) {
         setNewComment('')
+        toast.success('Comment added!')
+      } else {
+        toast.error('Failed to add comment')
       }
     } catch (error) {
       console.error('Error adding comment:', error)
+      toast.error('Failed to add comment')
     }
   }
 
   const handleAddSuggestion = async () => {
     if (!newSuggestion.suggested_value.trim() || !board) return
 
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const firebaseUser = auth.currentUser
+    if (!firebaseUser) {
+      toast.error('Please login to add suggestions')
+      return
+    }
     
     try {
+      const token = await firebaseUser.getIdToken()
+      
       const response = await fetch('http://localhost:8000/api/voyage-board/suggestion', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           board_id: boardId,
-          user_id: user.uid,
-          user_name: user.displayName || user.email,
+          user_id: firebaseUser.uid,
+          user_name: firebaseUser.displayName || firebaseUser.email || 'Anonymous',
           suggestion_type: newSuggestion.type,
           suggested_value: newSuggestion.suggested_value,
           reason: newSuggestion.reason,
@@ -158,59 +190,81 @@ const VoyageBoardPage = () => {
           reason: '',
           day_number: null
         })
+        toast.success('Suggestion added!')
+      } else {
+        toast.error('Failed to add suggestion')
       }
     } catch (error) {
       console.error('Error adding suggestion:', error)
+      toast.error('Failed to add suggestion')
     }
   }
 
   const handleVote = async (suggestionId: string, vote: 'up' | 'down') => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const firebaseUser = auth.currentUser
+    if (!firebaseUser) {
+      toast.error('Please login to vote')
+      return
+    }
     
     try {
+      const token = await firebaseUser.getIdToken()
+      
       await fetch('http://localhost:8000/api/voyage-board/vote', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           board_id: boardId,
           suggestion_id: suggestionId,
-          user_id: user.uid,
+          user_id: firebaseUser.uid,
           vote
         })
       })
+      
+      toast.success(`Vote ${vote === 'up' ? '👍' : '👎'} recorded!`)
     } catch (error) {
       console.error('Error voting:', error)
+      toast.error('Failed to vote')
     }
   }
 
   const handleLikeComment = async (commentId: string) => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const firebaseUser = auth.currentUser
+    if (!firebaseUser) {
+      toast.error('Please login to like comments')
+      return
+    }
     
     try {
+      const token = await firebaseUser.getIdToken()
+      
       await fetch('http://localhost:8000/api/voyage-board/like-comment', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           board_id: boardId,
           comment_id: commentId,
-          user_id: user.uid
+          user_id: firebaseUser.uid
         })
       })
     } catch (error) {
       console.error('Error liking comment:', error)
+      toast.error('Failed to like comment')
     }
   }
 
   const copyShareLink = () => {
     if (board) {
-      navigator.clipboard.writeText(board.share_link)
-      alert('Share link copied to clipboard!')
+      // Create a combined share link that includes both trip and board
+      const combinedUrl = `${window.location.origin}/trip/${board.trip_id}?board=${board.board_id}`
+      navigator.clipboard.writeText(combinedUrl)
+      toast.success('🎉 Share link copied! Recipients can view the trip AND join the discussion board.')
     }
   }
 
@@ -251,9 +305,20 @@ const VoyageBoardPage = () => {
               <h1 className="text-3xl font-bold mb-2">🚀 {board.board_name}</h1>
               <p className="text-neutral-400">{board.description}</p>
             </div>
-            <button onClick={copyShareLink} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
-              🔗 Share Board
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => navigate('/dashboard')} 
+                className="bg-neutral-700 hover:bg-neutral-600 px-4 py-2 rounded-lg text-sm"
+              >
+                ← Back to Dashboard
+              </button>
+              <button 
+                onClick={copyShareLink} 
+                className="bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-lg font-semibold"
+              >
+                🔗 Share Board & Trip
+              </button>
+            </div>
           </div>
 
           {/* Members */}

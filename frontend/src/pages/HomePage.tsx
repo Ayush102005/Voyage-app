@@ -70,8 +70,8 @@ const HomePage = () => {
 
       {/* Hero Section */}
       <section className="pt-32 pb-20 px-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-red-900/20 via-black to-black" />
-        <div className="absolute top-20 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#23424A]/30 via-black to-black" />
+        <div className="absolute top-20 right-0 w-96 h-96 bg-[#57A5B8]/10 rounded-full blur-3xl" />
         
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center max-w-4xl mx-auto">
@@ -108,7 +108,7 @@ const HomePage = () => {
               { emoji: "📅", title: "Enjoy Your Journey", desc: "Get a complete day-by-day plan with bookings and insights" }
             ].map((step, i) => (
               <div key={i} className="relative">
-                <div className="card text-center group hover:shadow-xl hover:shadow-red-600/20">
+                <div className="card text-center group hover:shadow-xl hover:shadow-[#57A5B8]/20">
                   <div className="text-6xl mb-6">{step.emoji}</div>
                   <h3 className="text-xl font-bold mb-3">{step.title}</h3>
                   <p className="text-neutral-400">{step.desc}</p>
@@ -168,7 +168,7 @@ const HomePage = () => {
             </button>
 
             <div className="text-center">
-              <div className="w-16 h-16 bg-red-600/10 rounded-full flex items-center justify-center mx-auto mb-6">
+              <div className="w-16 h-16 bg-[#57A5B8]/10 rounded-full flex items-center justify-center mx-auto mb-6">
                 <span className="text-3xl">🔒</span>
               </div>
 

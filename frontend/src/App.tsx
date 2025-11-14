@@ -13,6 +13,7 @@ import ProfileQuizPage from './pages/ProfileQuizPage.tsx'
 import DashboardPage from './pages/DashboardPage.tsx'
 import ExpenseTrackerPage from './pages/ExpenseTrackerPage.tsx'
 import VoyageBoardPage from './pages/VoyageBoardPage.tsx'
+import TripSharePage from './pages/TripSharePage.tsx'
 
 function App() {
   const { setUser, setLoading, setPreferences } = useAuthStore()
@@ -70,8 +71,9 @@ function App() {
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/profile-quiz" element={<ProfileQuizPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/trip/:tripId/expenses" element={<ExpenseTrackerPage />} />
-          <Route path="/board/:boardId" element={<VoyageBoardPage />} />
+          <Route path="/expense-tracker/:tripId" element={<ExpenseTrackerPage />} />
+          <Route path="/voyage-board/:boardId" element={<VoyageBoardPage />} />
+          <Route path="/trip/:tripId" element={<TripSharePage />} />
         </Routes>
       </div>
     </Router>

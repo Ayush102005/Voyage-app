@@ -1151,16 +1151,11 @@ class Expense(BaseModel):
 
 class AddExpenseRequest(BaseModel):
     """Request to add a new expense"""
-    trip_id: str = Field(description="Trip ID")
     category: str = Field(description="Expense category")
     amount: float = Field(description="Expense amount", gt=0)
     description: str = Field(description="Description of expense")
-    date: Optional[datetime] = Field(default=None, description="Expense date (defaults to now)")
-    location: Optional[str] = Field(default=None, description="Location where expense occurred")
-    payment_method: Optional[str] = Field(default=None, description="Payment method")
-    notes: Optional[str] = Field(default=None, description="Additional notes")
-    is_shared: bool = Field(default=False, description="Split expense with others?")
-    split_with: List[str] = Field(default=[], description="User IDs to split with")
+    date: Optional[str] = Field(default=None, description="Expense date (ISO format)")
+    split_among: int = Field(default=1, description="Number of people to split expense with")
 
 
 class UpdateExpenseRequest(BaseModel):

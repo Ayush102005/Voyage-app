@@ -502,13 +502,32 @@ class ExpenseTrackerService:
                 }
             }
         
-        trip_ref = self.db.collection('trip_plans').document(trip_id)
+        # Try 'trips' collection first
+        trip_ref = self.db.collection('trips').document(trip_id)
         trip_doc = trip_ref.get()
         
+        # Fallback to 'trip_plans' collection
         if not trip_doc.exists:
-            raise Exception(f"Trip {trip_id} not found")
+            trip_ref = self.db.collection('trip_plans').document(trip_id)
+            trip_doc = trip_ref.get()
         
-        return trip_doc.to_dict()
+        if not trip_doc.exists:
+            raise Exception(f"Trip {trip_id} not found in trips or trip_plans collections")
+        
+        trip_data = trip_doc.to_dict()
+        
+        # Ensure budget exists with default
+        if 'budget' not in trip_data or trip_data['budget'] is None:
+            trip_data['budget'] = 50000  # Default budget
+        
+        # Ensure dates exist
+        if 'start_date' not in trip_data or trip_data['start_date'] is None:
+            trip_data['start_date'] = datetime.now(timezone.utc)
+        
+        if 'end_date' not in trip_data or trip_data['end_date'] is None:
+            trip_data['end_date'] = datetime.now(timezone.utc) + timedelta(days=7)
+        
+        return trip_data
     
     def _get_trip_expenses(
         self,

@@ -434,6 +434,9 @@ def get_booking_link(hotel_name: str, city: str) -> str:
         for result in response.get('results', []):
             url = result.get('url', '')
             content = result.get('content', '')[:200]
+            # Skip image links
+            if url.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp')):
+                continue
             results.append(f"- {url}\n  {content}...")
         
         return f"Booking Information for {hotel_name} in {city}:\n" + "\n".join(results)

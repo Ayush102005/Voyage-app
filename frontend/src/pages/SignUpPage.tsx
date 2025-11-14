@@ -71,15 +71,15 @@ const SignUpPage = () => {
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-red-900/10 via-black to-black" />
-      <div className="absolute top-20 right-0 w-96 h-96 bg-red-600/5 rounded-full blur-3xl" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#23424A]/30 via-black to-black" />
+      <div className="absolute top-20 right-0 w-96 h-96 bg-[#57A5B8]/5 rounded-full blur-3xl" />
 
       <div className="relative z-10 w-full max-w-md">
         <button onClick={() => navigate('/')} className="flex items-center gap-2 text-neutral-400 hover:text-white mb-8 transition-colors">
           ← Back to Home
         </button>
 
-        <div className="bg-neutral-900 rounded-2xl border border-neutral-800 shadow-2xl shadow-red-600/10 p-8">
+        <div className="bg-neutral-900 rounded-2xl border border-neutral-800 shadow-2xl shadow-[#57A5B8]/10 p-8">
           <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-2 mb-4">
               <span className="text-3xl">✈️</span>
@@ -97,7 +97,7 @@ const SignUpPage = () => {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-red-600 transition-colors"
+                className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-[#57A5B8] transition-colors"
                 placeholder="John Doe"
               />
             </div>
@@ -109,7 +109,7 @@ const SignUpPage = () => {
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-red-600 transition-colors"
+                className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-[#57A5B8] transition-colors"
                 placeholder="you@example.com"
               />
             </div>
@@ -121,7 +121,7 @@ const SignUpPage = () => {
                 required
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-red-600 transition-colors"
+                className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-[#57A5B8] transition-colors"
                 placeholder="••••••••"
               />
             </div>
@@ -133,7 +133,7 @@ const SignUpPage = () => {
                 required
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-red-600 transition-colors"
+                className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-[#57A5B8] transition-colors"
                 placeholder="••••••••"
               />
             </div>
@@ -171,7 +171,7 @@ const SignUpPage = () => {
           <div className="mt-6 text-center">
             <p className="text-neutral-400">
               Already have an account?{' '}
-              <Link to="/login" className="text-red-600 hover:text-red-500 font-semibold">
+              <Link to="/login" className="text-[#57A5B8] hover:text-[#57A5B8] font-semibold">
                 Sign in
               </Link>
             </p>

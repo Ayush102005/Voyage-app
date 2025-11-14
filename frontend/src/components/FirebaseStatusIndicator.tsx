@@ -23,7 +23,7 @@ export const FirebaseStatusIndicator = () => {
       <div className="space-y-1 text-xs">
         <div className="flex justify-between">
           <span>Firestore:</span>
-          <span className={db ? 'text-green-500' : 'text-red-500'}>
+          <span className={db ? 'text-green-500' : 'text-[#57A5B8]'}>
             {db ? '✓ Connected' : '✗ Not initialized'}
           </span>
         </div>
