@@ -9,11 +9,14 @@ import { FirebaseStatusIndicator } from './components/FirebaseStatusIndicator.ts
 import HomePage from './pages/HomePage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
 import SignUpPage from './pages/SignUpPage.tsx'
+import PhoneVerificationPage from './pages/PhoneVerificationPage.tsx'
 import ProfileQuizPage from './pages/ProfileQuizPage.tsx'
 import DashboardPage from './pages/DashboardPage.tsx'
 import ExpenseTrackerPage from './pages/ExpenseTrackerPage.tsx'
 import VoyageBoardPage from './pages/VoyageBoardPage.tsx'
 import TripSharePage from './pages/TripSharePage.tsx'
+import SafetyAlertsPage from './pages/SafetyAlertsPage.tsx'
+import NotificationsPage from './pages/NotificationsPage.tsx'
 
 function App() {
   const { setUser, setLoading, setPreferences } = useAuthStore()
@@ -69,11 +72,15 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/phone-verification" element={<PhoneVerificationPage />} />
           <Route path="/profile-quiz" element={<ProfileQuizPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/expense-tracker/:tripId" element={<ExpenseTrackerPage />} />
           <Route path="/voyage-board/:boardId" element={<VoyageBoardPage />} />
+          <Route path="/board/:boardId" element={<VoyageBoardPage />} />
           <Route path="/trip/:tripId" element={<TripSharePage />} />
+          <Route path="/safety-alerts/:tripId" element={<SafetyAlertsPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
         </Routes>
       </div>
     </Router>

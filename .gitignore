@@ -13,6 +13,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
 
 # Node
 node_modules/
@@ -31,14 +32,50 @@ lerna-debug.log
 backend/.env
 frontend/.env
 
-# Firebase
+# Firebase credentials (keep template, ignore actual file)
 firebase-credentials.json
+**/firebase-credentials.json
 
 # Build artifacts
 dist/
 dist-ssr/
 build/
+*.egg-info/
 
 # Logs
 logs/
 *.log
+
+# Test and Demo files (keep for development, ignore for deployment)
+test_*.py
+demo_*.py
+*_test.py
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+temp_*.txt
+.DS_Store
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Deployment scripts (optional - uncomment if you want to keep these local)
+# cleanup.ps1
+# test-build.ps1
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation that shouldn't be deployed (optional)
+# DEBUGGING_PROFILE.md
+# TEST_RESULTS_REPORT.md
+# CALENDAR_DOWNLOAD_FEATURE.md

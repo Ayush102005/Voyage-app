@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { auth } from '../lib/firebase'
 import toast from 'react-hot-toast'
 
 export default function TripSharePage() {
   const { tripId } = useParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [tripData, setTripData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -84,6 +85,16 @@ export default function TripSharePage() {
     if (!tripId) return
     
     try {
+      // Check if board ID is in query params
+      const boardId = searchParams.get('board')
+      
+      if (boardId) {
+        // Board ID provided, navigate directly
+        navigate(`/voyage-board/${boardId}`)
+        return
+      }
+      
+      // No board ID, need to check if board exists for this trip
       const firebaseUser = auth.currentUser
       
       if (!firebaseUser) {
@@ -94,8 +105,9 @@ export default function TripSharePage() {
 
       const token = await firebaseUser.getIdToken()
       
-      // Check if board exists
-      const checkResponse = await fetch(`http://localhost:8000/api/voyage-board/${tripId}`, {
+      // Check if board exists for this trip
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const checkResponse = await fetch(`${apiUrl}/api/voyage-board/trip/${tripId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -123,7 +135,8 @@ export default function TripSharePage() {
       const token = firebaseUser ? await firebaseUser.getIdToken() : ''
 
       // Use the public share endpoint
-      const response = await fetch(`http://localhost:8000/api/trip-plans/share/${tripId}`, {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/trip-plans/share/${tripId}`, {
         headers: token ? {
           'Authorization': `Bearer ${token}`
         } : {}
@@ -150,21 +163,66 @@ export default function TripSharePage() {
   const formatItinerary = (text: string): string => {
     if (!text) return ''
     
+    // First, check if the content already has Day headers
+    const hasDayHeaders = /Day \d+/i.test(text)
+    
+    if (!hasDayHeaders) {
+      // If no day headers, wrap the entire content as overview/general information
+      let formatted = text
+        // Headers with numbers (1., 2., etc.)
+        .replace(/^(\d+)\.\s*(.+)$/gm, '<h3 class="text-lg font-bold text-teal-400 mt-6 mb-3">$1. $2</h3>')
+        // Bold text
+        .replace(/\*\*(.+?)\*\*/g, '<strong class="text-teal-500">$1</strong>')
+        // Headers with ## 
+        .replace(/^##\s*(.+)$/gm, '<h3 class="text-lg font-bold text-teal-400 mt-4 mb-2">$1</h3>')
+        // Bullet points with *, -, or • (with optional indentation)
+        .replace(/^\s*[*\-•]\s+(.+)$/gm, '<li class="ml-4 mb-2 text-neutral-200">• $1</li>')
+        // Lines starting with emoji
+        .replace(/^([🏨🍽️✈️🚗🎯💰📍🗓️⏰🌟🌊🏖️🎭🎪🎨🏛️⛪🕌].+)$/gm, '<p class="ml-2 mb-2 text-neutral-300">$1</p>')
+      
+      // Wrap consecutive list items in <ul>
+      formatted = formatted.replace(/(<li.+?<\/li>\n?)+/g, (match) => {
+        return '<ul class="list-none space-y-2 mb-4">' + match + '</ul>'
+      })
+      
+      // Handle paragraphs
+      const paragraphs = formatted.split(/\n\n+/)
+      formatted = paragraphs.map(para => {
+        if (para.match(/^<[uh]/)) return para
+        if (!para.trim()) return ''
+        return '<p class="mb-4 text-neutral-300 leading-relaxed">' + para.replace(/\n/g, '<br>') + '</p>'
+      }).filter(p => p).join('\n')
+      
+      return '<div class="mb-6 p-4 bg-yellow-600/10 border border-yellow-600/30 rounded-lg"><p class="text-yellow-400 text-sm mb-2">📋 This is an overview plan without day-wise breakdown</p></div>' + formatted
+    }
+    
+    // If content has Day headers, format with day sections highlighted
     let formatted = text
+      // Day headers - make them prominent
+      .replace(/^(Day\s+\d+:?\s*.*)$/gim, '<div class="mt-8 mb-4 p-4 bg-teal-600/20 border-l-4 border-teal-500 rounded-r-lg"><h2 class="text-2xl font-bold text-white">🗓️ $1</h2></div>')
+      // Headers with numbers (1., 2., etc.)
+      .replace(/^(\d+)\.\s*(.+)$/gm, '<h3 class="text-lg font-bold text-teal-400 mt-6 mb-3">$1. $2</h3>')
+      // Bold text
       .replace(/\*\*(.+?)\*\*/g, '<strong class="text-teal-500">$1</strong>')
-      .replace(/^(Day \d+:.+)$/gm, '<h3 class="text-xl font-bold text-white mt-6 mb-3">$1</h3>')
-      .replace(/^## (.+)$/gm, '<h3 class="text-lg font-bold text-teal-400 mt-4 mb-2">$1</h3>')
-      .replace(/^[-•] (.+)$/gm, '<li class="ml-4 mb-1">$1</li>')
-      .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 mb-1">$1</li>')
-      .replace(/^([🏨🍽️✈️🚗🎯💰📍🗓️⏰🌟].+)$/gm, '<p class="ml-2 mb-2">$1</p>')
-      .replace(/\n\n/g, '</p><p class="mb-3">')
-      .replace(/\n/g, '<br>')
+      // Headers with ## 
+      .replace(/^##\s*(.+)$/gm, '<h3 class="text-lg font-bold text-teal-400 mt-4 mb-2">$1</h3>')
+      // Bullet points with *, -, or • (with optional indentation)
+      .replace(/^\s*[*\-•]\s+(.+)$/gm, '<li class="ml-4 mb-2 text-neutral-200">• $1</li>')
+      // Lines starting with emoji
+      .replace(/^([🏨🍽️✈️🚗🎯💰📍🗓️⏰🌟🌊🏖️🎭🎪🎨🏛️⛪🕌].+)$/gm, '<p class="ml-2 mb-2 text-neutral-300">$1</p>')
     
-    formatted = '<p class="mb-3">' + formatted + '</p>'
-    
-    formatted = formatted.replace(/(<li.+?<\/li>(?:<br>)?)+/gs, (match) => {
-      return '<ul class="list-disc list-inside space-y-1 mb-4">' + match.replace(/<br>/g, '') + '</ul>'
+    // Wrap consecutive list items in <ul>
+    formatted = formatted.replace(/(<li.+?<\/li>\n?)+/g, (match) => {
+      return '<ul class="list-none space-y-2 mb-4">' + match + '</ul>'
     })
+    
+    // Handle paragraphs
+    const paragraphs = formatted.split(/\n\n+/)
+    formatted = paragraphs.map(para => {
+      if (para.match(/^<[udh]/)) return para
+      if (!para.trim()) return ''
+      return '<p class="mb-4 text-neutral-300 leading-relaxed">' + para.replace(/\n/g, '<br>') + '</p>'
+    }).filter(p => p).join('\n')
     
     return formatted
   }
@@ -311,12 +369,26 @@ export default function TripSharePage() {
 
             {/* Itinerary Content */}
             <div 
-              className="prose prose-invert max-w-none"
+              className="prose prose-invert max-w-none min-h-[400px]"
               style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}
-              dangerouslySetInnerHTML={{ 
+            >
+              {selectedDay && (
+                <div className="mb-4 p-3 bg-teal-600/20 border border-teal-600/30 rounded-lg text-sm">
+                  <span className="text-teal-400">
+                    {selectedDay === 'overview' ? '📋 Viewing overview' : `📅 Viewing Day ${selectedDay}`}
+                  </span>
+                  <button 
+                    onClick={showAllDays}
+                    className="ml-3 text-teal-300 hover:text-teal-100 underline"
+                  >
+                    Show full plan
+                  </button>
+                </div>
+              )}
+              <div dangerouslySetInnerHTML={{ 
                 __html: formatItinerary(filterByDays(tripData.itinerary)) 
-              }}
-            />
+              }} />
+            </div>
           </div>
         )}
 

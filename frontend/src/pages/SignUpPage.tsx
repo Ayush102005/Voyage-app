@@ -8,15 +8,32 @@ import { useAuthStore } from '../store/authStore.ts'
 const SignUpPage = () => {
   const navigate = useNavigate()
   const { setUser } = useAuthStore()
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', confirmPassword: '' })
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    email: '', 
+    password: '', 
+    confirmPassword: '',
+    phoneNumber: ''
+  })
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [showPhoneModal, setShowPhoneModal] = useState(false)
+  const [showOtpModal, setShowOtpModal] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [otpLoading, setOtpLoading] = useState(false)
+  const [verifyLoading, setVerifyLoading] = useState(false)
+  const [tempUser, setTempUser] = useState<any>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match')
+      return
+    }
+
+    if (!formData.phoneNumber || formData.phoneNumber.length < 10) {
+      toast.error('Please enter a valid phone number')
       return
     }
 
@@ -30,15 +47,18 @@ const SignUpPage = () => {
         displayName: formData.name
       })
       
-      setUser({
+      // Store user temporarily until phone is verified
+      setTempUser({
         uid: userCredential.user.uid,
         email: userCredential.user.email,
         displayName: formData.name,
       })
       
-      toast.success('Account created successfully!')
-      // After registration, always go to profile quiz
-      navigate('/profile-quiz')
+      // Send OTP
+      await sendOTP()
+      
+      toast.success('Account created! Please verify your phone number')
+      setShowOtpModal(true)
     } catch (error: any) {
       console.error('Signup error:', error)
       toast.error(error.message || 'Failed to create account')
@@ -47,25 +67,114 @@ const SignUpPage = () => {
     }
   }
 
+  const sendOTP = async () => {
+    setOtpLoading(true)
+    try {
+      const firebaseUser = auth.currentUser
+      const token = firebaseUser ? await firebaseUser.getIdToken() : ''
+      
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ phone_number: formData.phoneNumber })
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok) {
+        toast.success('OTP sent to your phone')
+      } else {
+        throw new Error(data.detail || 'Failed to send OTP')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send OTP')
+      throw error
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
+  const verifyOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      toast.error('Please enter a valid 6-digit OTP')
+      return
+    }
+
+    setVerifyLoading(true)
+    try {
+      const firebaseUser = auth.currentUser
+      const token = firebaseUser ? await firebaseUser.getIdToken() : ''
+      
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          phone_number: formData.phoneNumber,
+          otp: otp
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok) {
+        setUser(tempUser)
+        toast.success('Phone number verified successfully!')
+        setShowOtpModal(false)
+        navigate('/profile-quiz')
+      } else {
+        throw new Error(data.detail || 'Invalid OTP')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to verify OTP')
+    } finally {
+      setVerifyLoading(false)
+    }
+  }
+
   const handleGoogleSignUp = async () => {
     setGoogleLoading(true)
     
     try {
       const result = await signInWithPopup(auth, googleProvider)
-      setUser({
+      
+      // Store user temporarily until phone is verified
+      setTempUser({
         uid: result.user.uid,
         email: result.user.email,
         displayName: result.user.displayName,
       })
       
-      toast.success('Account created with Google!')
-      // After registration with Google, go to profile quiz
-      navigate('/profile-quiz')
+      toast.success('Account created with Google! Please verify your phone number')
+      // Show phone number input modal first
+      setShowPhoneModal(true)
     } catch (error: any) {
       console.error('Google sign-up error:', error)
       toast.error(error.message || 'Failed to sign up with Google')
     } finally {
       setGoogleLoading(false)
+    }
+  }
+
+  const handlePhoneSubmit = async () => {
+    if (!formData.phoneNumber || formData.phoneNumber.length < 10) {
+      toast.error('Please enter a valid phone number')
+      return
+    }
+
+    try {
+      await sendOTP()
+      setShowPhoneModal(false)
+      setShowOtpModal(true)
+    } catch (error) {
+      // Error already handled in sendOTP
     }
   }
 
@@ -112,6 +221,20 @@ const SignUpPage = () => {
                 className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-[#57A5B8] transition-colors"
                 placeholder="you@example.com"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2 text-neutral-300">Phone Number</label>
+              <input
+                type="tel"
+                required
+                value={formData.phoneNumber}
+                onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-[#57A5B8] transition-colors"
+                placeholder="+91 1234567890"
+                maxLength={15}
+              />
+              <p className="text-xs text-neutral-500 mt-1">We'll send an OTP to verify your number</p>
             </div>
 
             <div>
@@ -178,8 +301,113 @@ const SignUpPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Phone Number Modal for Google Users */}
+      {showPhoneModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-8 max-w-md w-full">
+            <h2 className="text-2xl font-bold mb-2">Verify Your Phone</h2>
+            <p className="text-neutral-400 mb-6">
+              Please enter your phone number to complete registration
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2 text-neutral-300">Phone Number</label>
+                <input
+                  type="tel"
+                  value={formData.phoneNumber}
+                  onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-[#57A5B8] transition-colors"
+                  placeholder="+1234567890"
+                  maxLength={15}
+                  autoFocus
+                  required
+                />
+                <p className="text-sm text-neutral-400 mt-1">
+                  We'll send an OTP to verify your number
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowPhoneModal(false)
+                    setFormData({ ...formData, phoneNumber: '' })
+                  }}
+                  className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-white py-3 rounded-lg font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePhoneSubmit}
+                  disabled={!formData.phoneNumber || formData.phoneNumber.length < 10}
+                  className="flex-1 btn-primary disabled:opacity-50"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OTP Verification Modal */}
+      {showOtpModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-8 max-w-md w-full">
+            <h2 className="text-2xl font-bold mb-2">Verify Phone Number</h2>
+            <p className="text-neutral-400 mb-6">
+              Enter the 6-digit OTP sent to {formData.phoneNumber}
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2 text-neutral-300">OTP Code</label>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-4 py-3 text-white text-center text-2xl tracking-widest placeholder-neutral-500 focus:outline-none focus:border-[#57A5B8] transition-colors"
+                  placeholder="000000"
+                  maxLength={6}
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => sendOTP()}
+                  disabled={otpLoading}
+                  className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-white py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
+                >
+                  {otpLoading ? 'Sending...' : 'Resend OTP'}
+                </button>
+                <button
+                  onClick={verifyOTP}
+                  disabled={verifyLoading || otp.length !== 6}
+                  className="flex-1 btn-primary disabled:opacity-50"
+                >
+                  {verifyLoading ? 'Verifying...' : 'Verify'}
+                </button>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowOtpModal(false)
+                  setOtp('')
+                }}
+                className="w-full text-neutral-400 hover:text-white py-2 text-sm transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 export default SignUpPage
+

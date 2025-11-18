@@ -3,8 +3,8 @@ Pydantic schemas for the Voyage travel planner application.
 These schemas define the structure of data flowing through the system.
 """
 
-from pydantic import BaseModel, Field, EmailStr
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field, EmailStr, field_validator
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 
 
@@ -383,6 +383,16 @@ class LearnedPreferences(BaseModel):
     last_analyzed: Optional[datetime] = None
 
 
+class NotificationPreferences(BaseModel):
+    """
+    User's notification channel preferences
+    """
+    sms_enabled: bool = Field(default=True, description="Enable SMS notifications")
+    whatsapp_enabled: bool = Field(default=True, description="Enable WhatsApp notifications")
+    email_enabled: bool = Field(default=True, description="Enable email notifications")
+    whatsapp_number: Optional[str] = Field(default=None, description="Separate WhatsApp number (if different from phone)")
+
+
 class UserProfile(BaseModel):
     """
     Comprehensive user profile with preferences
@@ -395,6 +405,12 @@ class UserProfile(BaseModel):
     
     # AI-learned preferences (auto-updated)
     learned_preferences: Optional[LearnedPreferences] = None
+    
+    # Notification preferences for security alerts
+    notification_preferences: Optional[NotificationPreferences] = Field(
+        default_factory=lambda: NotificationPreferences(),
+        description="Multi-channel notification preferences"
+    )
     
     # Profile metadata
     profile_completeness: Optional[int] = Field(
@@ -835,27 +851,21 @@ class VoyageBoardSuggestion(BaseModel):
     resolved_at: Optional[datetime] = Field(default=None, description="When resolved")
 
 
-class VoyageBoardPollOption(BaseModel):
-    """
-    A single option in a poll
-    """
-    option_id: str = Field(description="Unique option ID")
-    option_text: str = Field(description="Option text", min_length=1, max_length=200)
-    votes: list[str] = Field(default_factory=list, description="List of user IDs who voted for this option")
-
-
 class VoyageBoardPoll(BaseModel):
     """
     A poll on a Voyage Board
     """
     poll_id: str = Field(description="Unique poll ID")
     question: str = Field(description="Poll question", min_length=1, max_length=500)
-    options: list[VoyageBoardPollOption] = Field(description="Poll options")
+    options: list[str] = Field(description="Poll options as strings")
+    votes: dict[str, int] = Field(default_factory=dict, description="User ID to option index mapping")
     created_by: str = Field(description="User ID of creator")
-    created_by_name: str = Field(description="Display name of creator")
-    created_at: datetime = Field(description="When poll was created")
-    allow_multiple: bool = Field(default=False, description="Allow voting for multiple options")
-    is_closed: bool = Field(default=False, description="Whether poll is closed for voting")
+    creator_name: str = Field(description="Display name of creator")
+    created_at: Any = Field(description="When poll was created")
+    
+    class Config:
+        extra = "allow"  # Allow extra fields for flexibility
+        arbitrary_types_allowed = True
 
 
 class VoyageBoard(BaseModel):
@@ -921,7 +931,6 @@ class AddCommentRequest(BaseModel):
     """
     Request to add a comment to a Voyage Board
     """
-    board_id: str = Field(description="Board ID")
     content: str = Field(description="Comment text", min_length=1, max_length=1000)
     day_number: Optional[int] = Field(default=None, description="Day number (None = general)")
     activity_index: Optional[int] = Field(default=None, description="Activity index (None = day-level)")
@@ -952,7 +961,6 @@ class ResolveSuggestionRequest(BaseModel):
     """
     Request to accept/reject a suggestion (owner only)
     """
-    board_id: str = Field(description="Board ID")
     suggestion_id: str = Field(description="Suggestion to resolve")
     action: str = Field(description="Action: accept or reject")
     apply_to_itinerary: bool = Field(default=True, description="Apply change to actual trip plan")
@@ -972,7 +980,14 @@ class VoteOnPollRequest(BaseModel):
     Request to vote on a poll
     """
     poll_id: str = Field(description="Poll ID")
-    option_id: str = Field(description="Option ID to vote for")
+    option_index: int = Field(description="Index of the option to vote for (0-based)")
+
+
+class LikeCommentRequest(BaseModel):
+    """
+    Request to like/unlike a comment
+    """
+    comment_id: str = Field(description="Comment ID to like/unlike")
 
 
 class VoyageBoardResponse(BaseModel):
@@ -1025,6 +1040,11 @@ class GoogleCalendarExportRequest(BaseModel):
     include_hotels: bool = Field(default=True, description="Include hotel check-ins/outs")
     include_activities: bool = Field(default=True, description="Include activities")
     include_transport: bool = Field(default=True, description="Include transport")
+    # Optional fields from frontend for compatibility
+    destination: Optional[str] = Field(default=None, description="Trip destination")
+    start_date: Optional[str] = Field(default=None, description="Trip start date (alternative format)")
+    end_date: Optional[str] = Field(default=None, description="Trip end date")
+    itinerary: Optional[dict] = Field(default=None, description="Trip itinerary data")
 
 
 class GoogleCalendarExportResponse(BaseModel):
@@ -1147,14 +1167,17 @@ class Expense(BaseModel):
     is_shared: bool = Field(default=False, description="Is this a shared expense?")
     split_with: List[str] = Field(default=[], description="User IDs to split expense with")
     created_at: datetime = Field(description="When expense was logged")
+    deleted: bool = Field(default=False, description="Is this expense soft-deleted?")
 
 
 class AddExpenseRequest(BaseModel):
     """Request to add a new expense"""
+    trip_id: str = Field(description="Trip ID this expense belongs to")
     category: str = Field(description="Expense category")
     amount: float = Field(description="Expense amount", gt=0)
     description: str = Field(description="Description of expense")
     date: Optional[str] = Field(default=None, description="Expense date (ISO format)")
+    notes: Optional[str] = Field(default=None, description="Optional notes")
     split_among: int = Field(default=1, description="Number of people to split expense with")
 
 
@@ -1181,7 +1204,9 @@ class ExpenseTrackerSummary(BaseModel):
     projected_total: float = Field(description="Projected total spend at current rate")
     budget_status: str = Field(description="Status: on-track, over-budget, under-budget")
     categories: List[ExpenseCategory] = Field(description="Breakdown by category")
+    category_breakdown: List[ExpenseCategory] = Field(description="Alias for categories (backward compatibility)")
     recent_expenses: List[Expense] = Field(description="Recent expenses")
+    expenses: List[Expense] = Field(description="Alias for recent_expenses (backward compatibility)")
     total_expenses_count: int = Field(description="Total number of expenses logged")
     days_elapsed: int = Field(description="Days since trip started")
     days_remaining: int = Field(description="Days remaining in trip")
@@ -1333,6 +1358,63 @@ class UserDashboard(BaseModel):
 
 
 # ===========================
+# Safety Alerts Schemas
+# ===========================
+
+class SafetyAlert(BaseModel):
+    """Real-time safety alert for travelers"""
+    alert_id: str = Field(description="Unique alert identifier")
+    trip_id: str = Field(description="Associated trip ID")
+    severity: str = Field(description="Severity: low, medium, high, critical")
+    category: str = Field(description="Category: weather, health, security, natural_disaster, political, advisory")
+    title: str = Field(description="Alert title")
+    message: str = Field(description="Detailed alert message")
+    location: str = Field(description="Affected location/destination")
+    source: str = Field(description="Alert source: government, weather_service, news, etc.")
+    action_required: Optional[str] = Field(default=None, description="Recommended action for traveler")
+    expires_at: Optional[datetime] = Field(default=None, description="When alert expires")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="When alert was created")
+    is_read: bool = Field(default=False, description="Has user seen this alert")
+    is_dismissed: bool = Field(default=False, description="Has user dismissed this alert")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "alert_id": "alert_123",
+                "trip_id": "trip_abc",
+                "severity": "high",
+                "category": "weather",
+                "title": "Heavy Rainfall Warning",
+                "message": "Heavy rainfall expected in Mumbai for next 48 hours. Flash floods possible in low-lying areas.",
+                "location": "Mumbai",
+                "source": "India Meteorological Department",
+                "action_required": "Avoid travel to flood-prone areas. Keep emergency contacts handy.",
+                "expires_at": "2025-11-20T00:00:00Z"
+            }
+        }
+
+
+class CreateSafetyAlertRequest(BaseModel):
+    """Request to create a safety alert"""
+    trip_id: str = Field(description="Trip ID to associate alert with")
+    severity: str = Field(description="Severity: low, medium, high, critical")
+    category: str = Field(description="Category: weather, health, security, natural_disaster, political, advisory")
+    title: str = Field(description="Alert title")
+    message: str = Field(description="Detailed alert message")
+    location: str = Field(description="Affected location")
+    source: str = Field(default="manual", description="Alert source")
+    action_required: Optional[str] = Field(default=None, description="Recommended action")
+    expires_at: Optional[str] = Field(default=None, description="Expiry date (ISO format)")
+
+
+class SafetyAlertResponse(BaseModel):
+    """Response with safety alerts"""
+    alerts: List[SafetyAlert] = Field(description="List of active safety alerts")
+    unread_count: int = Field(description="Number of unread alerts")
+    critical_count: int = Field(description="Number of critical alerts")
+
+
+# ===========================
 # OTP Verification Schemas
 # ===========================
 
@@ -1367,7 +1449,6 @@ class OTPResponse(BaseModel):
     success: bool = Field(description="Whether operation was successful")
     message: str = Field(description="Result message")
     expires_in: Optional[int] = Field(default=None, description="OTP expiry time in seconds")
-    
-    last_updated: datetime = Field(description="When dashboard was last updated")
+
 
 

@@ -26,6 +26,23 @@ class FirestoreService:
         except Exception as e:
             logger.error(f"Error creating user profile: {str(e)}")
             raise
+    
+    def create_or_update_user_profile(self, user_id: str, profile_data: Dict[str, Any]) -> bool:
+        """Create or update user profile in Firestore"""
+        if not self.db:
+            raise Exception("Firestore not initialized")
+        try:
+            profile_data['updated_at'] = datetime.utcnow()
+            if 'created_at' not in profile_data:
+                profile_data['created_at'] = datetime.utcnow()
+            
+            self.db.collection('user_profiles').document(user_id).set(profile_data, merge=True)
+            print(f"✅ Created/Updated profile for user {user_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error creating/updating user profile: {str(e)}")
+            print(f"❌ Error saving profile: {str(e)}")
+            return False
 
     def get_user_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user preferences from Firestore users collection"""
@@ -81,6 +98,29 @@ class FirestoreService:
             print(f"❌ Error getting user profile: {str(e)}")
             logger.error(f"Error getting user profile: {str(e)}")
             return None
+    
+    def check_phone_number_exists(self, phone_number: str, exclude_user_id: str = None) -> bool:
+        """Check if a phone number is already registered to another user"""
+        if not self.db:
+            print(f"⚠️ Firestore not initialized")
+            return False
+        try:
+            # Query user_profiles collection for matching phone number
+            query = self.db.collection('user_profiles').where('phone_number', '==', phone_number)
+            results = list(query.stream())
+            
+            # If excluding a specific user (for updates), filter them out
+            if exclude_user_id:
+                results = [doc for doc in results if doc.id != exclude_user_id]
+            
+            exists = len(results) > 0
+            if exists:
+                print(f"⚠️ Phone number {phone_number} already registered")
+            return exists
+        except Exception as e:
+            print(f"❌ Error checking phone number: {str(e)}")
+            logger.error(f"Error checking phone number: {str(e)}")
+            return False
     def __init__(self):
         self.db = get_firestore_client()
         print("[OK] FirestoreService initialized")

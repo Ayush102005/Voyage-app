@@ -1,17 +1,15 @@
 """
 OTP Verification Service for Voyage
-Handles OTP generation, storage, and verification
+Handles OTP generation, storage, and verification using Fast2SMS
 """
 
 import random
 import string
 from datetime import datetime, timedelta
 from typing import Optional, Dict
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 
@@ -24,6 +22,17 @@ OTP_VALIDITY_MINUTES = 10
 MAX_ATTEMPTS = 3
 
 
+# Module-level convenience functions for backward compatibility
+def send_otp(phone_number: str) -> tuple[bool, str]:
+    """Send OTP to phone number (module-level function)"""
+    return OTPService.send_otp(phone_number)
+
+
+def verify_otp_simple(phone_number: str, otp: str) -> tuple[bool, str]:
+    """Verify OTP for phone number (module-level function)"""
+    return OTPService.verify_otp_simple(phone_number, otp)
+
+
 class OTPService:
     """Service for handling OTP operations"""
     
@@ -32,123 +41,68 @@ class OTPService:
         """Generate a random 6-digit OTP"""
         return ''.join(random.choices(string.digits, k=OTP_LENGTH))
     
-    @staticmethod
-    def send_otp_email(email: str, otp: str) -> bool:
-        """Send OTP via email"""
-        try:
-            # Email configuration
-            smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-            smtp_port = int(os.getenv('SMTP_PORT', '587'))
-            sender_email = os.getenv('SENDER_EMAIL')
-            sender_password = os.getenv('SENDER_PASSWORD')
-            
-            if not sender_email or not sender_password:
-                print("⚠️ Email credentials not configured. OTP will be logged to console.")
-                print(f"🔐 OTP for {email}: {otp}")
-                return True  # Return True for development
-            
-            # Create message
-            message = MIMEMultipart("alternative")
-            message["Subject"] = "Your Voyage OTP Code"
-            message["From"] = sender_email
-            message["To"] = email
-            
-            # HTML email template
-            html_content = f"""
-            <html>
-              <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f8fafc;">
-                <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; padding: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
-                  <div style="text-align: center; margin-bottom: 30px;">
-                    <h1 style="color: #1e3a8a; font-size: 32px; margin: 0;">✈️ Voyage</h1>
-                    <p style="color: #64748b; font-size: 14px; margin-top: 5px;">Your AI Travel Companion</p>
-                  </div>
-                  
-                  <div style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); padding: 30px; border-radius: 12px; text-align: center; margin-bottom: 30px;">
-                    <h2 style="color: #1e3a8a; margin: 0 0 10px 0;">Your Verification Code</h2>
-                    <div style="font-size: 48px; font-weight: bold; color: #2563eb; letter-spacing: 8px; margin: 20px 0;">
-                      {otp}
-                    </div>
-                    <p style="color: #64748b; font-size: 14px; margin: 10px 0 0 0;">
-                      Valid for {OTP_VALIDITY_MINUTES} minutes
-                    </p>
-                  </div>
-                  
-                  <div style="background: #fef3c7; padding: 20px; border-radius: 12px; border-left: 4px solid #f59e0b; margin-bottom: 30px;">
-                    <p style="margin: 0; color: #92400e; font-size: 14px;">
-                      <strong>🔒 Security Notice:</strong><br/>
-                      Never share this OTP with anyone. Voyage team will never ask for your OTP.
-                    </p>
-                  </div>
-                  
-                  <div style="text-align: center; color: #94a3b8; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
-                    <p>If you didn't request this OTP, please ignore this email.</p>
-                    <p style="margin-top: 10px;">© 2025 Voyage. All rights reserved.</p>
-                  </div>
-                </div>
-              </body>
-            </html>
-            """
-            
-            # Plain text version
-            text_content = f"""
-            Voyage - Your Verification Code
-            
-            Your OTP: {otp}
-            
-            This code is valid for {OTP_VALIDITY_MINUTES} minutes.
-            
-            Never share this OTP with anyone.
-            
-            If you didn't request this, please ignore this email.
-            
-            © 2025 Voyage
-            """
-            
-            part1 = MIMEText(text_content, "plain")
-            part2 = MIMEText(html_content, "html")
-            
-            message.attach(part1)
-            message.attach(part2)
-            
-            # Send email
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.starttls()
-                server.login(sender_email, sender_password)
-                server.sendmail(sender_email, email, message.as_string())
-            
-            print(f"✅ OTP sent to {email}")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Failed to send OTP email: {e}")
-            # For development, still log the OTP
-            print(f"🔐 OTP for {email}: {otp}")
-            return True  # Return True for development
     
     @staticmethod
-    def send_otp_sms(phone_number: str, otp: str) -> bool:
-        """Send OTP via SMS (placeholder for SMS gateway integration)"""
+    def send_otp_via_fast2sms(phone_number: str, otp: str) -> bool:
+        """Send OTP via Fast2SMS"""
         try:
-            # TODO: Integrate with SMS gateway (Twilio, AWS SNS, etc.)
-            # For now, just log to console
-            print(f"📱 SMS OTP for {phone_number}: {otp}")
+            api_key = os.getenv('FAST2SMS_API_KEY')
             
-            # In production, use Twilio or similar:
-            # from twilio.rest import Client
-            # client = Client(account_sid, auth_token)
-            # message = client.messages.create(
-            #     body=f"Your Voyage OTP is: {otp}. Valid for {OTP_VALIDITY_MINUTES} minutes.",
-            #     from_=twilio_phone,
-            #     to=phone_number
-            # )
+            if not api_key:
+                print("⚠️ FAST2SMS_API_KEY not configured")
+                print(f"📱 Console OTP for {phone_number}: {otp}")
+                print(f"⏰ Valid for {OTP_VALIDITY_MINUTES} minutes")
+                return True  # Return True for development/testing
             
+            # Format phone number (only digits, remove country code)
+            clean_number = phone_number.replace('+91', '').replace('+', '').replace('-', '').replace(' ', '')
+            
+            # Validate phone number (should be 10 digits for India)
+            if len(clean_number) != 10 or not clean_number.isdigit():
+                print(f"⚠️ Invalid phone number format: {phone_number}")
+                print(f"📱 Console OTP: {otp}")
+                return True
+            
+            url = "https://www.fast2sms.com/dev/bulkV2"
+            
+            payload = {
+                "route": "v3",
+                "sender_id": "FTWSMS",
+                "message": f"Your Voyage verification code is {otp}. Valid for {OTP_VALIDITY_MINUTES} minutes. Do not share with anyone.",
+                "language": "english",
+                "flash": 0,
+                "numbers": clean_number
+            }
+            
+            headers = {
+                "authorization": api_key,
+                "Content-Type": "application/json"
+            }
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('return'):
+                    print(f"✅ OTP sent via Fast2SMS to +91{clean_number}")
+                    print(f"   Message ID: {result.get('message_id', 'N/A')}")
+                    return True
+                else:
+                    print(f"❌ Fast2SMS failed: {result.get('message', 'Unknown error')}")
+            else:
+                print(f"❌ Fast2SMS error: HTTP {response.status_code}")
+            
+            # Fallback to console
+            print(f"📱 Console OTP for {phone_number}: {otp}")
             return True
+                
         except Exception as e:
-            print(f"❌ Failed to send OTP SMS: {e}")
-            return False
+            print(f"❌ Fast2SMS error: {e}")
+            print(f"📱 Console OTP for {phone_number}: {otp}")
+            return True  # Return True so OTP is still stored locally
     
     @staticmethod
-    def store_otp(identifier: str, otp: str, method: str = 'email'):
+    def store_otp(identifier: str, otp: str, method: str = 'sms'):
         """Store OTP with expiry time"""
         otp_storage[identifier] = {
             'otp': otp,
@@ -159,6 +113,7 @@ class OTPService:
             'verified': False
         }
         print(f"💾 OTP stored for {identifier} (expires in {OTP_VALIDITY_MINUTES} min)")
+
     
     @staticmethod
     def verify_otp(identifier: str, otp: str) -> Dict[str, any]:
@@ -216,55 +171,70 @@ class OTPService:
     @staticmethod
     def send_otp(phone_number: str) -> tuple[bool, str]:
         """
-        Send OTP to phone number (wrapper for server.py compatibility)
+        Send OTP to phone number using Fast2SMS
         Returns: (success: bool, message: str)
         """
-        # Generate OTP
-        otp = OTPService.generate_otp()
-        
-        # Try to send via SMS
-        success = OTPService.send_otp_sms(phone_number, otp)
-        
-        if success:
-            # Store OTP
+        try:
+            print("\n" + "=" * 60)
+            print("📱 SENDING OTP via Fast2SMS")
+            print("=" * 60)
+            
+            # Generate OTP
+            otp = OTPService.generate_otp()
+            
+            # Send via Fast2SMS
+            sms_sent = OTPService.send_otp_via_fast2sms(phone_number, otp)
+            
+            # Store OTP locally for verification (always store for local verification)
             OTPService.store_otp(phone_number, otp, 'sms')
-            return (True, f'OTP sent successfully to {phone_number}')
-        else:
-            return (False, 'Failed to send OTP. Please try again.')
+            
+            if sms_sent:
+                return (True, f'OTP sent to {phone_number}')
+            else:
+                return (True, f'OTP generated (check console): {otp}')
+                
+        except Exception as e:
+            print(f"❌ Error in send_otp: {e}")
+            import traceback
+            traceback.print_exc()
+            return (False, f'Error sending OTP: {str(e)}')
     
     @staticmethod
     def verify_otp_simple(phone_number: str, otp: str) -> tuple[bool, str]:
         """
-        Verify OTP (wrapper for server.py compatibility)
+        Verify OTP using local storage
         Returns: (success: bool, message: str)
         """
-        result = OTPService.verify_otp(phone_number, otp)
-        return (result['success'], result['message'])
+        try:
+            print(f"\n🔐 Verifying OTP for {phone_number}")
+            
+            # Use local verification
+            result = OTPService.verify_otp(phone_number, otp)
+            
+            if result['success']:
+                print(f"✅ OTP verified successfully")
+            else:
+                print(f"❌ OTP verification failed: {result['message']}")
+            
+            return (result['success'], result['message'])
+                
+        except Exception as e:
+            print(f"❌ Error verifying OTP: {e}")
+            import traceback
+            traceback.print_exc()
+            return (False, f'Error verifying OTP: {str(e)}')
+    
     
     @staticmethod
-    def resend_otp(identifier: str, method: str = 'email') -> Dict[str, any]:
-        """Resend OTP to identifier"""
-        # Generate new OTP
-        new_otp = OTPService.generate_otp()
-        
-        # Send based on method
-        success = False
-        if method == 'email':
-            success = OTPService.send_otp_email(identifier, new_otp)
-        elif method == 'sms':
-            success = OTPService.send_otp_sms(identifier, new_otp)
-        
-        if success:
-            OTPService.store_otp(identifier, new_otp, method)
-            return {
-                'success': True,
-                'message': f'OTP resent successfully via {method}!'
-            }
-        else:
-            return {
-                'success': False,
-                'message': f'Failed to send OTP via {method}.'
-            }
+    def resend_otp(identifier: str, method: str = 'sms') -> Dict[str, any]:
+        """Resend OTP to phone number"""
+        # Simply call send_otp again
+        success, message = OTPService.send_otp(identifier)
+        return {
+            'success': success,
+            'message': message
+        }
+
     
     @staticmethod
     def cleanup_expired_otps():

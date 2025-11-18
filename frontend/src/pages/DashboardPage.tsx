@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore'
 import { signOut } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import toast from 'react-hot-toast'
+import NotificationBell from '../components/NotificationBell'
 
 const DashboardPage = () => {
   const navigate = useNavigate()
@@ -23,13 +24,16 @@ const DashboardPage = () => {
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [startDate, setStartDate] = useState<string>('')
   const [endDate, setEndDate] = useState<string>('')
-  // Edit mode state
-  const [isEditMode, setIsEditMode] = useState(false)
-  const [editedPlan, setEditedPlan] = useState('')
   const [currentTripId, setCurrentTripId] = useState<string | null>(null)
   const [viewingSavedTrip, setViewingSavedTrip] = useState(false)
   const [currentTripTitle, setCurrentTripTitle] = useState('')
   const [userPrompt, setUserPrompt] = useState<string>('')
+  // Chat history to show conversation flow
+  const [chatHistory, setChatHistory] = useState<Array<{role: 'user' | 'assistant', content: string}>>([])  
+  // AI Edit Trip state
+  const [showAIEditModal, setShowAIEditModal] = useState(false)
+  const [aiEditPrompt, setAiEditPrompt] = useState('')
+  const [isReplanning, setIsReplanning] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -71,6 +75,8 @@ const DashboardPage = () => {
       .replace(/^[-•] (.+)$/gm, '<li class="ml-4 mb-1">$1</li>')
       .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 mb-1">$1</li>')
       .replace(/^([🏨🍽️✈️🚗🎯💰📍🗓️⏰🌟].+)$/gm, '<p class="ml-2 mb-2">$1</p>')
+      // Convert markdown links [text](url) to HTML links
+      .replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-teal-400 hover:text-teal-300 underline">$1</a>')
       .replace(/\n\n/g, '</p><p class="mb-3">')
       .replace(/\n/g, '<br>')
     
@@ -144,7 +150,9 @@ const DashboardPage = () => {
       const firebaseUser = auth.currentUser
       const token = firebaseUser ? await firebaseUser.getIdToken() : ''
       
-      const response = await fetch('http://localhost:8000/api/for-you', {
+      // Add cache buster to force fresh data
+      const cacheBuster = new Date().getTime()
+      const response = await fetch(`http://localhost:8000/api/for-you?refresh=true&_=${cacheBuster}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -192,6 +200,62 @@ const DashboardPage = () => {
     }
   }, [activeView])
 
+  // Auto-check for optimization suggestions
+  useEffect(() => {
+    if (!user || activeView !== 'chat' || !currentTripId) return
+
+    const checkOptimization = async () => {
+      try {
+        const firebaseUser = auth.currentUser
+        const token = firebaseUser ? await firebaseUser.getIdToken() : ''
+        
+        const response = await fetch(`http://localhost:8000/api/check-optimization-needed/${currentTripId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          
+          if (data.should_optimize && data.reasons && data.reasons.length > 0) {
+            // Show notification with auto-optimization suggestion
+            toast(
+              <div>
+                <p className="font-semibold">💡 Optimization Suggestion</p>
+                <p className="text-sm">{data.reasons[0]}</p>
+                <button 
+                  onClick={() => {
+                    const optimizePrompt = `Optimize my current day. I want to make the most of the remaining time today.`
+                    setInput(optimizePrompt)
+                  }}
+                  className="mt-2 text-xs bg-teal-600 hover:bg-teal-700 px-3 py-1 rounded"
+                >
+                  Optimize Now
+                </button>
+              </div>,
+              {
+                duration: 8000,
+                icon: '✨',
+              }
+            )
+          }
+        }
+      } catch (error) {
+        // Silently fail - this is just a convenience feature
+        console.log('Optimization check skipped:', error)
+      }
+    }
+
+    // Check immediately
+    checkOptimization()
+    
+    // Check every 30 minutes
+    const interval = setInterval(checkOptimization, 30 * 60 * 1000)
+    
+    return () => clearInterval(interval)
+  }, [user, activeView, currentTripId])
+
   const handleLogout = async () => {
     try {
       await signOut(auth)
@@ -212,6 +276,8 @@ const DashboardPage = () => {
     
     // Save the user's prompt to display
     setUserPrompt(prompt)
+    // Add user message to chat history
+    setChatHistory(prev => [...prev, { role: 'user', content: prompt }])
     
     setIsGenerating(true)
     setGeneratedPlan('Generating your personalized itinerary...')
@@ -244,11 +310,15 @@ const DashboardPage = () => {
 
       if (data.success) {
         setGeneratedPlan(data.trip_plan)
+        // Add AI response to chat history
+        setChatHistory(prev => [...prev, { role: 'assistant', content: data.trip_plan }])
         toast.success('Trip plan generated!')
         setPreviousExtraction(null)
         setInput('')
       } else if (data.message === 'Need more information') {
         setGeneratedPlan(data.trip_plan)
+        // Add AI response to chat history for follow-up questions
+        setChatHistory(prev => [...prev, { role: 'assistant', content: data.trip_plan }])
         toast('Please provide more details', { icon: '💬' })
         setPreviousExtraction(data.extracted_details)
         setInput('')
@@ -265,7 +335,7 @@ const DashboardPage = () => {
   }
 
   const handleSendMessage = async () => {
-    // Send prompt directly - backend will extract dates from the prompt
+    // Send prompt to backend - it will ask for missing info including dates
     if (!input.trim()) return
     
     await sendPrompt(input, undefined, undefined)
@@ -334,9 +404,60 @@ const DashboardPage = () => {
     setViewingSavedTrip(false)
     setCurrentTripTitle('')
     setCurrentTripId(null)
-    setIsEditMode(false)
     setUserPrompt('')
+    setChatHistory([]) // Clear chat history for new conversation
     toast.success('Started new chat')
+  }
+
+  const handleAIReplan = async () => {
+    if (!currentTripId || !aiEditPrompt.trim()) {
+      toast.error('Please enter your modification request')
+      return
+    }
+
+    setIsReplanning(true)
+    setShowAIEditModal(false)
+    // Add edit request to chat history
+    setChatHistory(prev => [...prev, { role: 'user', content: `Edit request: ${aiEditPrompt}` }])
+
+    try {
+      const firebaseUser = auth.currentUser
+      const token = firebaseUser ? await firebaseUser.getIdToken() : ''
+
+      toast.loading('AI is replanning your trip...', { id: 'replan' })
+
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/replan?trip_id=${currentTripId}&user_feedback=${encodeURIComponent(aiEditPrompt)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to replan trip')
+      }
+
+      const data = await response.json()
+
+      toast.success('Trip replanned successfully!', { id: 'replan' })
+      
+      // Update the displayed plan
+      setGeneratedPlan(data.trip_plan)
+      // Add AI edit response to chat history
+      setChatHistory(prev => [...prev, { role: 'assistant', content: data.trip_plan }])
+      
+      // Refresh trips list
+      await fetchMyTrips()
+      
+      setAiEditPrompt('')
+    } catch (error: any) {
+      console.error('Error replanning trip:', error)
+      toast.error(error.message || 'Failed to replan trip', { id: 'replan' })
+    } finally {
+      setIsReplanning(false)
+    }
   }
 
   const handleSaveTrip = async () => {
@@ -475,7 +596,8 @@ const DashboardPage = () => {
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="bg-black/80 backdrop-blur-lg border-b border-neutral-800 px-8 py-4 flex-shrink-0">
-          <h1 className="text-2xl font-bold">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold">
             {activeView === 'chat' && viewingSavedTrip && (
               <>Saved Trip: <span className="gradient-text">{currentTripTitle}</span></>
             )}
@@ -489,6 +611,8 @@ const DashboardPage = () => {
               <>My <span className="gradient-text">Trips</span></>
             )}
           </h1>
+          <NotificationBell />
+          </div>
           <p className="text-sm text-neutral-400 mt-1">
             {activeView === 'chat' && viewingSavedTrip && "Viewing your saved itinerary"}
             {activeView === 'chat' && !viewingSavedTrip && "Tell me your destination, budget, and dates - I'll create your perfect itinerary"}
@@ -532,13 +656,26 @@ const DashboardPage = () => {
 
                 {generatedPlan && (
                   <div className="space-y-4 w-full">
-                    {/* Display user's message */}
-                    {userPrompt && (
-                      <div className="flex justify-end mb-4">
-                        <div className="bg-teal-600 text-white rounded-2xl rounded-tr-sm px-6 py-3 max-w-[80%]">
-                          <p className="text-sm font-medium mb-1">You asked:</p>
-                          <p>{userPrompt}</p>
-                        </div>
+                    {/* Display full chat history */}
+                    {chatHistory.length > 0 && (
+                      <div className="space-y-4 mb-6">
+                        {chatHistory.slice(0, -1).map((msg, idx) => (
+                          <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            {msg.role === 'user' ? (
+                              <div className="bg-teal-600 text-white rounded-2xl rounded-tr-sm px-6 py-3 max-w-[80%]">
+                                <p className="text-sm font-medium mb-1">You:</p>
+                                <p className="text-sm">{msg.content}</p>
+                              </div>
+                            ) : (
+                              <div className="bg-neutral-800 text-white rounded-2xl rounded-tl-sm px-6 py-3 max-w-[80%]">
+                                <p className="text-sm font-medium mb-1 text-teal-400">AI Assistant:</p>
+                                <div className="text-sm prose prose-invert max-w-none" 
+                                  dangerouslySetInnerHTML={{ __html: msg.content.substring(0, 200) + (msg.content.length > 200 ? '...' : '') }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
                     
@@ -555,95 +692,44 @@ const DashboardPage = () => {
                         <span>✈️</span> {viewingSavedTrip ? 'Saved Itinerary' : 'Your Itinerary'}
                       </h3>
                       <div className="flex gap-2 flex-wrap">
-                        {isEditMode ? (
-                          <>
-                            <button
-                              onClick={async () => {
-                                if (!currentTripId) {
-                                  toast.error('No trip selected for editing')
-                                  return
-                                }
-                                
-                                try {
-                                  const firebaseUser = auth.currentUser
-                                  const token = firebaseUser ? await firebaseUser.getIdToken() : ''
-                                  
-                                  const response = await fetch(`http://localhost:8000/api/trip-plans/${currentTripId}`, {
-                                    method: 'PUT',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      'Authorization': `Bearer ${token}`
-                                    },
-                                    body: JSON.stringify({
-                                      itinerary: editedPlan
-                                    })
-                                  })
-                                  
-                                  if (response.ok) {
-                                    setGeneratedPlan(editedPlan)
-                                    setIsEditMode(false)
-                                    setCurrentTripId(null)
-                                    toast.success('Trip updated successfully!')
-                                    fetchMyTrips() // Refresh the trips list
-                                  } else {
-                                    toast.error('Failed to update trip')
-                                  }
-                                } catch (error) {
-                                  console.error('Error updating trip:', error)
-                                  toast.error('Failed to update trip')
-                                }
-                              }}
-                              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
-                            >
-                              <span>💾</span> Save Changes
-                            </button>
-                            <button
-                              onClick={() => {
-                                setIsEditMode(false)
-                                setEditedPlan('')
-                                setCurrentTripId(null)
-                                toast('Edit mode cancelled', { icon: '❌' })
-                              }}
-                              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
-                            >
-                              <span>❌</span> Cancel
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              onClick={handleSaveTrip}
-                              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
-                            >
-                              <span>💾</span> Save Trip
-                            </button>
-                            <button
-                              onClick={() => {
-                                const promptText = `Optimize my current day. I want to make the most of the remaining time today.`
-                                setInput(promptText)
-                                toast('Optimize your day! Add details like: current location, what you\'ve already done, remaining budget, time available, etc.', { 
-                                  icon: '✨',
-                                  duration: 6000 
-                                })
-                              }}
-                              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg text-sm font-semibold transition-all flex items-center gap-2"
-                              title="Get AI-powered suggestions to optimize your current day based on location, time, and interests"
-                            >
-                              <span>✨</span> Optimize Today
-                            </button>
-                            <button
-                              onClick={() => {
-                                setGeneratedPlan('')
-                                setPreviousExtraction(null)
-                                setSelectedDay(null)
-                                setIsEditMode(false)
-                              }}
-                              className="text-sm text-neutral-500 hover:text-teal-600 px-3"
-                            >
-                              Clear ✕
-                            </button>
-                          </>
+                        <button
+                          onClick={handleSaveTrip}
+                          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                        >
+                          <span>💾</span> Save Trip
+                        </button>
+                        {currentTripId && (
+                          <button
+                            onClick={() => setShowAIEditModal(true)}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                          >
+                            <span>✨</span> Edit Trip
+                          </button>
                         )}
+                        <button
+                          onClick={() => {
+                            const promptText = `Optimize my current day. I want to make the most of the remaining time today.`
+                            setInput(promptText)
+                            toast('Optimize your day! Add details like: current location, what you\'ve already done, remaining budget, time available, etc.', { 
+                              icon: '✨',
+                              duration: 6000 
+                            })
+                          }}
+                          className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg text-sm font-semibold transition-all flex items-center gap-2"
+                          title="Get AI-powered suggestions to optimize your current day based on location, time, and interests"
+                        >
+                          <span>✨</span> Optimize Today
+                        </button>
+                        <button
+                          onClick={() => {
+                            setGeneratedPlan('')
+                            setPreviousExtraction(null)
+                            setSelectedDay(null)
+                          }}
+                          className="text-sm text-neutral-500 hover:text-teal-600 px-3"
+                        >
+                          Clear ✕
+                        </button>
                       </div>
                     </div>
 
@@ -706,35 +792,13 @@ const DashboardPage = () => {
                     )}
                     
                     <div className="card p-6 w-full">
-                      {isEditMode ? (
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 text-yellow-500 bg-yellow-500/10 p-3 rounded-lg">
-                            <span>✏️</span>
-                            <span className="text-sm font-medium">Edit Mode Active - Make your changes below</span>
-                          </div>
-                          <textarea
-                            value={editedPlan}
-                            onChange={(e) => setEditedPlan(e.target.value)}
-                            className="w-full min-h-[500px] bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-teal-600 transition-colors resize-y"
-                            placeholder="Edit your trip itinerary..."
-                            style={{ 
-                              lineHeight: '1.6',
-                              fontFamily: 'ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace'
-                            }}
-                          />
-                          <div className="text-xs text-neutral-500">
-                            💡 Tip: You can edit the text directly. Changes will be saved when you click "Save Changes".
-                          </div>
-                        </div>
-                      ) : (
-                        <div 
-                          className="prose prose-invert max-w-none w-full"
-                          style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}
-                          dangerouslySetInnerHTML={{ 
-                            __html: formatItinerary(filterByDays(generatedPlan)) 
-                          }}
-                        />
-                      )}
+                      <div 
+                        className="prose prose-invert max-w-none w-full"
+                        style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}
+                        dangerouslySetInnerHTML={{ 
+                          __html: formatItinerary(filterByDays(generatedPlan)) 
+                        }}
+                      />
                     </div>
                   </div>
                 )}
@@ -779,40 +843,50 @@ const DashboardPage = () => {
         {activeView === 'foryou' && (
           <div className="flex-1 overflow-y-auto p-8">
             <div className="max-w-4xl mx-auto">
-              {forYouData && forYouData.recommendations ? (
+              {forYouData && forYouData.suggestions ? (
                 <>
                   <div className="text-center py-8 mb-8">
                     <span className="text-6xl mb-4 block">🎯</span>
                     <h2 className="text-2xl font-bold mb-3">Personalized For You</h2>
                     <p className="text-neutral-400">
-                      Based on your {preferences?.travelStyle} travel style
+                      Based on your {preferences?.travelStyle} travel style with real-time updates
                     </p>
                   </div>
 
                   <div className="grid gap-6">
-                    {forYouData.recommendations.map((rec: any, idx: number) => (
+                    {forYouData.suggestions.map((rec: any, idx: number) => (
                       <div key={idx} className="card p-6 hover:border-teal-600/50 transition-colors">
                         <div className="flex items-start gap-4 mb-4">
-                          <span className="text-4xl">{rec.emoji || '✈️'}</span>
+                          <span className="text-4xl">✈️</span>
                           <div className="flex-1">
-                            <h3 className="text-xl font-bold mb-2">{rec.title || rec.destination}</h3>
+                            <div className="flex items-center gap-3 mb-2">
+                              <h3 className="text-xl font-bold">{rec.destination}</h3>
+                              {rec.urgency && (
+                                <span className="px-2 py-1 bg-red-600/20 text-red-400 rounded-full text-xs font-semibold">
+                                  ⏰ {rec.urgency}
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="text-lg text-teal-400 mb-2">{rec.title}</h4>
                             <p className="text-neutral-400 text-sm mb-3">{rec.description}</p>
+                            <p className="text-neutral-300 text-sm mb-3">
+                              <span className="text-teal-400 font-semibold">Why for you:</span> {rec.reason}
+                            </p>
                             <div className="flex flex-wrap gap-2 mb-3">
                               {rec.category && (
-                                <span className="px-3 py-1 bg-teal-600/20 text-teal-400 rounded-full text-xs">
-                                  {rec.category}
+                                <span className="px-3 py-1 bg-teal-600/20 text-teal-400 rounded-full text-xs font-semibold capitalize">
+                                  {rec.category.replace(/_/g, ' ')}
                                 </span>
                               )}
                               {rec.tags?.map((tag: string, i: number) => (
-                                <span key={i} className="px-3 py-1 bg-teal-600/20 text-teal-400 rounded-full text-xs">
-                                  {tag}
+                                <span key={i} className="px-3 py-1 bg-neutral-800 text-neutral-300 rounded-full text-xs">
+                                  #{tag}
                                 </span>
                               ))}
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-neutral-500 mb-4">
-                              <span>💰 {rec.price || rec.budget}</span>
-                              {rec.location && <span>📍 {rec.location}</span>}
-                              <span>⭐ {rec.rating}/5</span>
+                            <div className="flex items-center gap-4 text-sm text-neutral-400 mb-4">
+                              <span>💰 {rec.estimated_budget}</span>
+                              <span>📅 {rec.best_time}</span>
                             </div>
 
                             {/* Events Section */}
@@ -832,7 +906,8 @@ const DashboardPage = () => {
                                             href={event.link} 
                                             target="_blank" 
                                             rel="noopener noreferrer"
-                                            className="text-xs text-teal-400 hover:text-teal-300"
+                                            className="text-xs text-teal-400 hover:text-teal-300 cursor-pointer underline hover:no-underline transition-all"
+                                            onClick={(e) => e.stopPropagation()}
                                           >
                                             Details →
                                           </a>
@@ -847,7 +922,7 @@ const DashboardPage = () => {
                             {/* Foods Section */}
                             {rec.foods && rec.foods.length > 0 && (
                               <div className="mb-4">
-                                <h4 className="text-sm font-semibold text-teal-400 mb-2">🍽️ Special Foods</h4>
+                                <h4 className="text-sm font-semibold text-teal-400 mb-2">🍽️ Must-Try Foods</h4>
                                 <div className="space-y-2">
                                   {rec.foods.map((food: any, i: number) => (
                                     <div key={i} className="bg-neutral-800/50 p-3 rounded-lg">
@@ -862,7 +937,8 @@ const DashboardPage = () => {
                                             href={food.recipeLink} 
                                             target="_blank" 
                                             rel="noopener noreferrer"
-                                            className="text-xs text-teal-400 hover:text-teal-300"
+                                            className="text-xs text-teal-400 hover:text-teal-300 cursor-pointer underline hover:no-underline transition-all"
+                                            onClick={(e) => e.stopPropagation()}
                                           >
                                             Recipe →
                                           </a>
@@ -876,12 +952,12 @@ const DashboardPage = () => {
                           </div>
                         </div>
                         <button
-                          onClick={async () => {
+                          onClick={() => {
                             setActiveView('chat')
-                            const p = `Plan a trip to ${rec.title || rec.destination}`
+                            const p = `Plan a trip to ${rec.destination}`
                             setInput(p)
-                            // Send directly without date modal
-                            await sendPrompt(p, undefined, undefined)
+                            setPendingPrompt(p)
+                            setShowDateModal(true)
                           }}
                           className="btn-primary w-full py-2"
                         >
@@ -944,7 +1020,6 @@ const DashboardPage = () => {
                             onClick={() => {
                               // Clear any previous generation state
                               setIsGenerating(false)
-                              setIsEditMode(false)
                               setCurrentTripId(trip.id)
                               setPreviousExtraction(null)
                               setInput('')
@@ -968,6 +1043,11 @@ const DashboardPage = () => {
                               
                               // Set the saved plan
                               setGeneratedPlan(planToDisplay)
+                              // Initialize chat history with saved trip
+                              setChatHistory([
+                                { role: 'user', content: `Plan a trip to ${trip.destination}` },
+                                { role: 'assistant', content: planToDisplay }
+                              ])
                               // Switch to chat view to display the plan
                               setActiveView('chat')
                             }}
@@ -979,17 +1059,60 @@ const DashboardPage = () => {
                             onClick={() => {
                               setActiveView('chat')
                               setGeneratedPlan(trip.itinerary || '')
-                              setEditedPlan(trip.itinerary || '')
                               setCurrentTripId(trip.id)
-                              setIsEditMode(true)
-                              toast('Edit mode activated! Make changes and click "Save Changes"', { 
-                                icon: '✏️',
-                                duration: 4000 
-                              })
+                              setViewingSavedTrip(true)
+                              setCurrentTripTitle(trip.destination || 'Trip')
+                              // Initialize chat history for edit
+                              setChatHistory([
+                                { role: 'user', content: `Plan a trip to ${trip.destination}` },
+                                { role: 'assistant', content: trip.itinerary || '' }
+                              ])
+                              setShowAIEditModal(true)
                             }}
-                            className="bg-neutral-800 hover:bg-neutral-700 text-white py-2 rounded-lg text-sm transition-colors"
+                            className="bg-teal-600 hover:bg-teal-700 text-white py-2 rounded-lg text-sm transition-colors"
                           >
-                            ✏️ Edit
+                            🤖 Edit Trip
+                          </button>
+                          <button 
+                            onClick={async () => {
+                              try {
+                                const firebaseUser = auth.currentUser
+                                if (!firebaseUser) {
+                                  toast.error('Please login first')
+                                  return
+                                }
+                                
+                                const token = await firebaseUser.getIdToken()
+                                const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+                                
+                                toast.loading('Starting your trip...')
+                                
+                                // Update trip to mark as started
+                                const response = await fetch(`${apiUrl}/api/trip-plans/${trip.id}/start`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                  }
+                                })
+                                
+                                if (response.ok) {
+                                  toast.dismiss()
+                                  toast.success('🎉 Trip started! Safe travels!')
+                                  fetchMyTrips() // Refresh trips
+                                } else {
+                                  toast.dismiss()
+                                  toast.error('Failed to start trip')
+                                }
+                              } catch (error) {
+                                console.error('Error starting trip:', error)
+                                toast.dismiss()
+                                toast.error('Failed to start trip')
+                              }
+                            }}
+                            className="bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm transition-colors font-semibold"
+                          >
+                            🚀 Start Trip
                           </button>
                           <button 
                             onClick={async () => {
@@ -999,8 +1122,9 @@ const DashboardPage = () => {
                                 
                                 toast.loading('Opening Voyage Board...')
                                 
+                                const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
                                 // Check if board exists for this trip
-                                const checkResponse = await fetch(`http://localhost:8000/api/voyage-board/trip/${trip.id}`, {
+                                const checkResponse = await fetch(`${apiUrl}/api/voyage-board/trip/${trip.id}`, {
                                   headers: {
                                     'Authorization': `Bearer ${token}`
                                   }
@@ -1011,7 +1135,7 @@ const DashboardPage = () => {
                                   toast.dismiss()
                                   toast.loading('Creating collaboration board...')
                                   
-                                  const createResponse = await fetch('http://localhost:8000/api/voyage-board', {
+                                  const createResponse = await fetch(`${apiUrl}/api/voyage-board`, {
                                     method: 'POST',
                                     headers: {
                                       'Content-Type': 'application/json',
@@ -1021,7 +1145,7 @@ const DashboardPage = () => {
                                       trip_id: trip.id,
                                       board_name: trip.destination || 'Trip Collaboration Board',
                                       description: `Collaborate on ${trip.destination || 'this trip'}`,
-                                      is_public: false
+                                      is_public: true
                                     })
                                   })
                                   
@@ -1058,76 +1182,7 @@ const DashboardPage = () => {
                             }}
                             className="bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg text-sm transition-colors font-semibold"
                           >
-                            💬 Discuss
-                          </button>
-                          <button 
-                            onClick={async () => {
-                              try {
-                                const firebaseUser = auth.currentUser
-                                const token = firebaseUser ? await firebaseUser.getIdToken() : ''
-                                
-                                toast.loading('Opening Voyage Board...')
-                                
-                                // Check if board exists for this trip
-                                const checkResponse = await fetch(`http://localhost:8000/api/voyage-board/trip/${trip.id}`, {
-                                  headers: {
-                                    'Authorization': `Bearer ${token}`
-                                  }
-                                })
-                                
-                                if (checkResponse.status === 404) {
-                                  // Board doesn't exist, create it
-                                  toast.dismiss()
-                                  toast.loading('Creating collaboration board...')
-                                  
-                                  const createResponse = await fetch('http://localhost:8000/api/voyage-board', {
-                                    method: 'POST',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      'Authorization': `Bearer ${token}`
-                                    },
-                                    body: JSON.stringify({
-                                      trip_id: trip.id,
-                                      board_name: trip.destination || 'Trip Collaboration Board',
-                                      description: `Collaborate on ${trip.destination || 'this trip'}`,
-                                      is_public: false
-                                    })
-                                  })
-                                  
-                                  if (createResponse.ok) {
-                                    const data = await createResponse.json()
-                                    toast.dismiss()
-                                    toast.success('Board created! Opening...')
-                                    
-                                    // Navigate immediately - the board should exist now
-                                    setTimeout(() => {
-                                      navigate(`/voyage-board/${data.board.board_id}`)
-                                    }, 1500)
-                                  } else {
-                                    toast.dismiss()
-                                    const errorData = await createResponse.json().catch(() => ({}))
-                                    console.error('Board creation failed:', errorData)
-                                    toast.error(errorData.detail || 'Failed to create board')
-                                  }
-                                } else if (checkResponse.ok) {
-                                  // Board exists, navigate to it
-                                  const boardData = await checkResponse.json()
-                                  toast.dismiss()
-                                  toast.success('Opening board...')
-                                  navigate(`/voyage-board/${boardData.board.board_id}`)
-                                } else {
-                                  toast.dismiss()
-                                  toast.error('Failed to access board')
-                                }
-                              } catch (error) {
-                                console.error('Error accessing board:', error)
-                                toast.dismiss()
-                                toast.error('Failed to access board')
-                              }
-                            }}
-                            className="bg-orange-600 hover:bg-orange-700 text-white py-2 rounded-lg text-sm transition-colors font-semibold"
-                          >
-                            🗳️ Vote
+                            🔗 Share
                           </button>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
@@ -1299,6 +1354,67 @@ const DashboardPage = () => {
                 </button>
                 <button onClick={confirmDatesAndSend} className="px-4 py-2 bg-teal-600 hover:bg-teal-700 rounded-lg text-sm text-white">
                   Confirm & Plan
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AI Edit Modal */}
+        {showAIEditModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/60" onClick={() => !isReplanning && setShowAIEditModal(false)} />
+            <div className="relative bg-neutral-900 border border-neutral-800 rounded-lg p-8 w-full max-w-3xl z-10">
+              <div className="text-center mb-8">
+                <span className="text-6xl mb-4 block">✨</span>
+                <h2 className="text-2xl font-bold mb-3">Ready to modify?</h2>
+                <p className="text-neutral-400">
+                  Tell me how you'd like to change your trip. I'll regenerate the plan with your modifications!
+                </p>
+              </div>
+              
+              <div className="grid gap-3 mb-8">
+                {[
+                  "Make it more luxurious with 5-star hotels",
+                  "Add more adventure activities and water sports",
+                  "Focus on authentic local food experiences",
+                  "Make it more budget-friendly"
+                ].map((example, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setAiEditPrompt(example)}
+                    className="px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-left hover:border-teal-600/50 transition-colors text-sm"
+                    disabled={isReplanning}
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-4">
+                <input
+                  type="text"
+                  value={aiEditPrompt}
+                  onChange={(e) => setAiEditPrompt(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !isReplanning && aiEditPrompt.trim() && handleAIReplan()}
+                  placeholder="Describe how you want to change your trip..."
+                  disabled={isReplanning}
+                  className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-6 py-4 text-white placeholder-neutral-500 focus:outline-none focus:border-teal-600 transition-colors disabled:opacity-50"
+                />
+                <button 
+                  onClick={handleAIReplan} 
+                  disabled={isReplanning || !aiEditPrompt.trim()}
+                  className="btn-primary px-8 disabled:opacity-50 disabled:cursor-not-allowed min-w-[140px]"
+                >
+                  {isReplanning ? (
+                    <span className="flex items-center gap-2 justify-center">
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                      </svg>
+                      <span>Replanning...</span>
+                    </span>
+                  ) : 'Send →'}
                 </button>
               </div>
             </div>

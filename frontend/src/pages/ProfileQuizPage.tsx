@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { doc, setDoc } from 'firebase/firestore'
-import { db } from '../lib/firebase.ts'
+import { db, auth } from '../lib/firebase.ts'
 import { useAuthStore } from '../store/authStore.ts'
 
 const ProfileQuizPage = () => {
@@ -69,25 +69,54 @@ const ProfileQuizPage = () => {
     console.log('👤 User ID:', user.uid)
 
     try {
+      // Check if user has verified phone number
+      const firebaseUser = auth.currentUser
+      const token = firebaseUser ? await firebaseUser.getIdToken() : ''
+      
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const profileResponse = await fetch(`${apiUrl}/api/profile/status`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (profileResponse.ok) {
+        const profileStatus = await profileResponse.json()
+        
+        // If no phone number, redirect to phone verification first
+        if (!profileStatus.has_phone_number || !profileStatus.phone_verified) {
+          toast.error('Please verify your phone number first')
+          navigate('/phone-verification')
+          return
+        }
+      }
+
       const userPreferences = {
-        travelStyle: formData.travelStyle,
+        travel_style: formData.travelStyle,
         interests: formData.interests,
-        budgetPreference: formData.budgetPreference,
+        budget_preference: formData.budgetPreference,
+        completed: true,
+      }
+
+      const profileData = {
+        email: user.email,
+        display_name: user.displayName || user.email?.split('@')[0] || 'User',
+        preferences: userPreferences,
         profileComplete: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
 
-      console.log('💾 Saving to Firestore:', userPreferences)
+      console.log('💾 Saving to Firestore:', profileData)
       
       // Save to Firestore
       const userDocRef = doc(db, 'users', user.uid)
-      await setDoc(userDocRef, userPreferences, { merge: true })
+      await setDoc(userDocRef, profileData, { merge: true })
       
       console.log('✅ Successfully saved to Firestore')
 
       // Update local state
-      setPreferences(userPreferences)
+      setPreferences(profileData)
 
       toast.success('Profile complete! Let\'s start planning!')
       navigate('/dashboard')

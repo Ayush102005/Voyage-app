@@ -42,6 +42,16 @@ interface VoyageBoardSuggestion {
   status: string
 }
 
+interface Poll {
+  poll_id: string
+  question: string
+  options: string[]
+  votes: { [userId: string]: number } // userId -> option index
+  created_by: string
+  creator_name: string
+  created_at: string
+}
+
 interface VoyageBoard {
   board_id: string
   trip_id: string
@@ -54,6 +64,7 @@ interface VoyageBoard {
   members: VoyageBoardMember[]
   comments: VoyageBoardComment[]
   suggestions: VoyageBoardSuggestion[]
+  polls: Poll[]
   activity_log: any[]
   created_at: string
   updated_at: string
@@ -70,19 +81,17 @@ const VoyageBoardPage = () => {
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
-  const [activeTab, setActiveTab] = useState<'comments' | 'suggestions' | 'activity'>('comments')
-  const [newSuggestion, setNewSuggestion] = useState({
-    type: 'activity',
-    suggested_value: '',
-    reason: '',
-    day_number: null as number | null
+  const [activeTab, setActiveTab] = useState<'comments' | 'polls' | 'activity'>('comments')
+  const [newPoll, setNewPoll] = useState({
+    question: '',
+    options: ['', '']
   })
 
   // Check URL parameters for initial tab
   useEffect(() => {
     const tab = searchParams.get('tab')
-    if (tab === 'vote' || tab === 'suggestions') {
-      setActiveTab('suggestions')
+    if (tab === 'vote' || tab === 'polls') {
+      setActiveTab('polls')
     } else if (tab === 'discuss' || tab === 'comments') {
       setActiveTab('comments')
     } else if (tab === 'activity') {
@@ -90,29 +99,69 @@ const VoyageBoardPage = () => {
     }
   }, [searchParams])
 
-  // Real-time listener for board updates
+  // Verify access and then set up real-time listener
   useEffect(() => {
     if (!boardId) return
 
-    const boardRef = doc(db, 'voyage_boards', boardId)
-    
-    const unsubscribe = onSnapshot(boardRef, (doc) => {
-      if (doc.exists()) {
-        console.log('✅ Board found:', doc.id)
-        setBoard(doc.data() as VoyageBoard)
-        setLoading(false)
-      } else {
-        console.warn('⚠️ Board document not found:', boardId)
+    const verifyAccessAndListen = async () => {
+      try {
+        // First verify access via API
+        const firebaseUser = auth.currentUser
+        const token = firebaseUser ? await firebaseUser.getIdToken() : ''
+        
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+        const accessCode = searchParams.get('code')
+        
+        const verifyUrl = accessCode 
+          ? `${apiUrl}/api/voyage-board/${boardId}?access_code=${accessCode}`
+          : `${apiUrl}/api/voyage-board/${boardId}`
+        
+        const response = await fetch(verifyUrl, {
+          headers: token ? {
+            'Authorization': `Bearer ${token}`
+          } : {}
+        })
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ detail: 'Access denied' }))
+          toast.error(error.detail || 'Cannot access this board')
+          setLoading(false)
+          return
+        }
+
+        // Access verified, now set up real-time listener
+        const boardRef = doc(db, 'voyage_boards', boardId)
+        
+        const unsubscribe = onSnapshot(boardRef, (doc) => {
+          if (doc.exists()) {
+            console.log('✅ Board found:', doc.id)
+            setBoard(doc.data() as VoyageBoard)
+            setLoading(false)
+          } else {
+            console.warn('⚠️ Board document not found:', boardId)
+            setLoading(false)
+          }
+        }, (error) => {
+          console.error('❌ Error listening to board:', error)
+          toast.error('Failed to load Voyage Board: ' + error.message)
+          setLoading(false)
+        })
+
+        return unsubscribe
+      } catch (error) {
+        console.error('Error verifying board access:', error)
+        toast.error('Failed to load board')
         setLoading(false)
       }
-    }, (error) => {
-      console.error('❌ Error listening to board:', error)
-      toast.error('Failed to load Voyage Board: ' + error.message)
-      setLoading(false)
-    })
+    }
 
-    return () => unsubscribe()
-  }, [boardId])
+    let unsubscribe: (() => void) | undefined
+    verifyAccessAndListen().then(unsub => { unsubscribe = unsub })
+
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [boardId, searchParams])
 
   const handleAddComment = async () => {
     if (!newComment.trim() || !board) return
@@ -126,14 +175,14 @@ const VoyageBoardPage = () => {
     try {
       const token = await firebaseUser.getIdToken()
       
-      const response = await fetch('http://localhost:8000/api/voyage-board/comment', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/voyage-board/${boardId}/comment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          board_id: boardId,
           user_id: firebaseUser.uid,
           user_name: firebaseUser.displayName || firebaseUser.email || 'Anonymous',
           content: newComment,
@@ -154,53 +203,55 @@ const VoyageBoardPage = () => {
     }
   }
 
-  const handleAddSuggestion = async () => {
-    if (!newSuggestion.suggested_value.trim() || !board) return
+  const handleAddPoll = async () => {
+    if (!newPoll.question.trim() || !board) {
+      toast.error('Please enter a question')
+      return
+    }
+
+    const validOptions = newPoll.options.filter(opt => opt.trim())
+    if (validOptions.length < 2) {
+      toast.error('Please provide at least 2 options')
+      return
+    }
 
     const firebaseUser = auth.currentUser
     if (!firebaseUser) {
-      toast.error('Please login to add suggestions')
+      toast.error('Please login to create polls')
       return
     }
     
     try {
       const token = await firebaseUser.getIdToken()
       
-      const response = await fetch('http://localhost:8000/api/voyage-board/suggestion', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/voyage-board/${boardId}/poll`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          board_id: boardId,
+          question: newPoll.question,
+          options: validOptions,
           user_id: firebaseUser.uid,
-          user_name: firebaseUser.displayName || firebaseUser.email || 'Anonymous',
-          suggestion_type: newSuggestion.type,
-          suggested_value: newSuggestion.suggested_value,
-          reason: newSuggestion.reason,
-          day_number: newSuggestion.day_number
+          user_name: firebaseUser.displayName || firebaseUser.email || 'Anonymous'
         })
       })
 
       if (response.ok) {
-        setNewSuggestion({
-          type: 'activity',
-          suggested_value: '',
-          reason: '',
-          day_number: null
-        })
-        toast.success('Suggestion added!')
+        setNewPoll({ question: '', options: ['', ''] })
+        toast.success('Poll created!')
       } else {
-        toast.error('Failed to add suggestion')
+        toast.error('Failed to create poll')
       }
     } catch (error) {
-      console.error('Error adding suggestion:', error)
-      toast.error('Failed to add suggestion')
+      console.error('Error creating poll:', error)
+      toast.error('Failed to create poll')
     }
   }
 
-  const handleVote = async (suggestionId: string, vote: 'up' | 'down') => {
+  const handleVoteOnPoll = async (pollId: string, optionIndex: number) => {
     const firebaseUser = auth.currentUser
     if (!firebaseUser) {
       toast.error('Please login to vote')
@@ -210,25 +261,54 @@ const VoyageBoardPage = () => {
     try {
       const token = await firebaseUser.getIdToken()
       
-      await fetch('http://localhost:8000/api/voyage-board/vote', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      await fetch(`${apiUrl}/api/voyage-board/${boardId}/poll/vote`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          board_id: boardId,
-          suggestion_id: suggestionId,
+          poll_id: pollId,
           user_id: firebaseUser.uid,
-          vote
+          option_index: optionIndex
         })
       })
       
-      toast.success(`Vote ${vote === 'up' ? '👍' : '👎'} recorded!`)
+      toast.success('Vote recorded!')
     } catch (error) {
       console.error('Error voting:', error)
       toast.error('Failed to vote')
     }
+  }
+
+  const addPollOption = () => {
+    setNewPoll({ ...newPoll, options: [...newPoll.options, ''] })
+  }
+
+  const removePollOption = (index: number) => {
+    if (newPoll.options.length > 2) {
+      setNewPoll({ 
+        ...newPoll, 
+        options: newPoll.options.filter((_, i) => i !== index) 
+      })
+    }
+  }
+
+  const updatePollOption = (index: number, value: string) => {
+    const updated = [...newPoll.options]
+    updated[index] = value
+    setNewPoll({ ...newPoll, options: updated })
+  }
+
+  const handleAddSuggestion = async () => {
+    // Keep old function for backwards compatibility
+    return
+  }
+
+  const handleVote = async (suggestionId: string, vote: 'up' | 'down') => {
+    // Keep old function for backwards compatibility
+    return
   }
 
   const handleLikeComment = async (commentId: string) => {
@@ -241,14 +321,14 @@ const VoyageBoardPage = () => {
     try {
       const token = await firebaseUser.getIdToken()
       
-      await fetch('http://localhost:8000/api/voyage-board/like-comment', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      await fetch(`${apiUrl}/api/voyage-board/${boardId}/comment/like`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          board_id: boardId,
           comment_id: commentId,
           user_id: firebaseUser.uid
         })
@@ -266,12 +346,6 @@ const VoyageBoardPage = () => {
       navigator.clipboard.writeText(combinedUrl)
       toast.success('🎉 Share link copied! Recipients can view the trip AND join the discussion board.')
     }
-  }
-
-  const getVoteCount = (suggestion: VoyageBoardSuggestion) => {
-    const upvotes = Object.values(suggestion.votes).filter(v => v === 'up').length
-    const downvotes = Object.values(suggestion.votes).filter(v => v === 'down').length
-    return { upvotes, downvotes, score: upvotes - downvotes }
   }
 
   if (loading) {
@@ -356,15 +430,15 @@ const VoyageBoardPage = () => {
               activeTab === 'comments' ? 'border-red-500 text-red-500' : 'border-transparent text-neutral-400'
             }`}
           >
-            💬 Comments ({board.comments.length})
+            💬 Discussion ({board.comments.length})
           </button>
           <button
-            onClick={() => setActiveTab('suggestions')}
+            onClick={() => setActiveTab('polls')}
             className={`px-4 py-2 font-semibold border-b-2 ${
-              activeTab === 'suggestions' ? 'border-red-500 text-red-500' : 'border-transparent text-neutral-400'
+              activeTab === 'polls' ? 'border-red-500 text-red-500' : 'border-transparent text-neutral-400'
             }`}
           >
-            💡 Suggestions ({board.suggestions.filter(s => s.status === 'pending').length})
+            🗳️ Vote ({board.polls?.length || 0})
           </button>
           <button
             onClick={() => setActiveTab('activity')}
@@ -376,153 +450,217 @@ const VoyageBoardPage = () => {
           </button>
         </div>
 
-        {/* Comments Tab */}
+        {/* Comments Tab - Chat Style */}
         {activeTab === 'comments' && (
-          <div className="space-y-6">
-            {/* Add Comment */}
-            <div className="card p-6">
-              <h3 className="text-xl font-bold mb-4">Add Comment</h3>
-              <div className="space-y-4">
+          <div className="flex flex-col h-[600px]">
+            {/* Messages Container */}
+            <div className="flex-1 overflow-y-auto space-y-3 p-4 bg-neutral-900/50 rounded-t-lg">
+              {board.comments.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-neutral-500">
+                  No messages yet. Start the conversation!
+                </div>
+              ) : (
+                board.comments.map((comment) => {
+                  const firebaseUser = auth.currentUser
+                  const isOwnMessage = firebaseUser && comment.user_id === firebaseUser.uid
+                  
+                  return (
+                    <div 
+                      key={comment.comment_id} 
+                      className={`flex gap-3 ${isOwnMessage ? 'flex-row-reverse' : 'flex-row'}`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                        {comment.user_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className={`flex flex-col max-w-[70%] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-semibold text-neutral-400">
+                            {isOwnMessage ? 'You' : comment.user_name}
+                          </span>
+                          {comment.day_number && (
+                            <span className="text-xs bg-blue-600/30 px-2 py-0.5 rounded">
+                              Day {comment.day_number}
+                            </span>
+                          )}
+                          <span className="text-xs text-neutral-600">
+                            {new Date(comment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div className={`px-4 py-2 rounded-2xl ${
+                          isOwnMessage 
+                            ? 'bg-red-600 text-white' 
+                            : 'bg-neutral-800 text-neutral-200'
+                        }`}>
+                          <p className="text-sm">{comment.content}</p>
+                        </div>
+                        <button
+                          onClick={() => handleLikeComment(comment.comment_id)}
+                          className={`text-xs mt-1 flex items-center gap-1 ${
+                            comment.likes.includes(firebaseUser?.uid || '') 
+                              ? 'text-red-400' 
+                              : 'text-neutral-500 hover:text-red-400'
+                          }`}
+                        >
+                          ❤️ {comment.likes.length}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {/* Message Input */}
+            <div className="bg-neutral-900 p-4 rounded-b-lg border-t border-neutral-800">
+              <div className="flex gap-2 mb-2">
                 <select
                   value={selectedDay || ''}
                   onChange={(e) => setSelectedDay(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2"
+                  className="bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-1 text-sm"
                 >
-                  <option value="">General Comment</option>
+                  <option value="">General</option>
                   <option value="1">Day 1</option>
                   <option value="2">Day 2</option>
                   <option value="3">Day 3</option>
                 </select>
+              </div>
+              <div className="flex gap-2">
                 <textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Share your thoughts..."
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 min-h-[100px]"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleAddComment()
+                    }
+                  }}
+                  placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+                  className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 resize-none"
+                  rows={2}
                 />
                 <button
                   onClick={handleAddComment}
-                  className="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-lg font-semibold"
+                  className="bg-red-600 hover:bg-red-700 px-6 rounded-lg font-semibold transition-colors"
                 >
-                  Post Comment
+                  Send
                 </button>
               </div>
-            </div>
-
-            {/* Comments List */}
-            <div className="space-y-4">
-              {board.comments.map((comment) => (
-                <div key={comment.comment_id} className="card p-4">
-                  <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-sm font-bold">
-                      {comment.user_name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-semibold">{comment.user_name}</span>
-                        {comment.day_number && (
-                          <span className="text-xs bg-neutral-800 px-2 py-1 rounded">
-                            Day {comment.day_number}
-                          </span>
-                        )}
-                        <span className="text-xs text-neutral-500">
-                          {new Date(comment.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-neutral-300 mb-2">{comment.content}</p>
-                      <button
-                        onClick={() => handleLikeComment(comment.comment_id)}
-                        className="text-sm text-neutral-400 hover:text-red-500"
-                      >
-                        ❤️ {comment.likes.length}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         )}
 
-        {/* Suggestions Tab */}
-        {activeTab === 'suggestions' && (
+        {/* Polls/Vote Tab */}
+        {activeTab === 'polls' && (
           <div className="space-y-6">
-            {/* Add Suggestion */}
-            <div className="card p-6">
-              <h3 className="text-xl font-bold mb-4">Suggest a Change</h3>
-              <div className="space-y-4">
-                <select
-                  value={newSuggestion.type}
-                  onChange={(e) => setNewSuggestion({...newSuggestion, type: e.target.value})}
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2"
-                >
-                  <option value="activity">Activity Change</option>
-                  <option value="accommodation">Accommodation</option>
-                  <option value="restaurant">Restaurant</option>
-                  <option value="timing">Timing</option>
-                </select>
-                <input
-                  type="text"
-                  value={newSuggestion.suggested_value}
-                  onChange={(e) => setNewSuggestion({...newSuggestion, suggested_value: e.target.value})}
-                  placeholder="Your suggestion..."
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2"
-                />
-                <textarea
-                  value={newSuggestion.reason}
-                  onChange={(e) => setNewSuggestion({...newSuggestion, reason: e.target.value})}
-                  placeholder="Why this change? (optional)"
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3"
-                />
-                <button
-                  onClick={handleAddSuggestion}
-                  className="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-lg font-semibold"
-                >
-                  Submit Suggestion
-                </button>
-              </div>
-            </div>
-
-            {/* Suggestions List */}
+            {/* Existing Polls */}
             <div className="space-y-4">
-              {board.suggestions.filter(s => s.status === 'pending').map((suggestion) => {
-                const votes = getVoteCount(suggestion)
+              {board.polls && board.polls.map((poll) => {
+                const totalVotes = Object.keys(poll.votes).length
+                const firebaseUser = auth.currentUser
+                const userVote = firebaseUser ? poll.votes[firebaseUser.uid] : undefined
+                
                 return (
-                  <div key={suggestion.suggestion_id} className="card p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="flex flex-col items-center gap-1">
-                        <button
-                          onClick={() => handleVote(suggestion.suggestion_id, 'up')}
-                          className="text-neutral-400 hover:text-green-500"
-                        >
-                          ▲
-                        </button>
-                        <span className="font-bold text-lg">{votes.score}</span>
-                        <button
-                          onClick={() => handleVote(suggestion.suggestion_id, 'down')}
-                          className="text-neutral-400 hover:text-red-500"
-                        >
-                          ▼
-                        </button>
+                  <div key={poll.poll_id} className="card p-6">
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-semibold text-neutral-400">{poll.creator_name}</span>
+                        <span className="text-xs text-neutral-500">
+                          {new Date(poll.created_at).toLocaleString()}
+                        </span>
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-semibold">{suggestion.user_name}</span>
-                          <span className="text-xs bg-blue-600 px-2 py-1 rounded">
-                            {suggestion.suggestion_type}
-                          </span>
-                        </div>
-                        <p className="text-lg mb-2">{suggestion.suggested_value}</p>
-                        {suggestion.reason && (
-                          <p className="text-sm text-neutral-400 mb-2">"{suggestion.reason}"</p>
-                        )}
-                        <div className="text-xs text-neutral-500">
-                          {votes.upvotes} 👍 • {votes.downvotes} 👎
-                        </div>
-                      </div>
+                      <h4 className="text-xl font-bold mb-4">{poll.question}</h4>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {poll.options.map((option, index) => {
+                        const optionVotes = Object.values(poll.votes).filter(v => v === index).length
+                        const percentage = totalVotes > 0 ? (optionVotes / totalVotes * 100).toFixed(0) : 0
+                        const isSelected = userVote === index
+                        
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => handleVoteOnPoll(poll.poll_id, index)}
+                            className={`w-full text-left p-4 rounded-lg border-2 transition-all ${ 
+                              isSelected 
+                                ? 'border-red-500 bg-red-500/20' 
+                                : 'border-neutral-700 hover:border-neutral-600 bg-neutral-800'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="font-semibold">{option}</span>
+                              <span className="text-sm text-neutral-400">{percentage}%</span>
+                            </div>
+                            <div className="w-full bg-neutral-700 rounded-full h-2">
+                              <div 
+                                className="bg-red-500 h-2 rounded-full transition-all"
+                                style={{ width: `${percentage}%` }}
+                              />
+                            </div>
+                            <div className="text-xs text-neutral-500 mt-1">
+                              {optionVotes} {optionVotes === 1 ? 'vote' : 'votes'}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    
+                    <div className="mt-4 text-sm text-neutral-500 text-center">
+                      {totalVotes} total {totalVotes === 1 ? 'vote' : 'votes'}
                     </div>
                   </div>
                 )
               })}
+            </div>
+
+            {/* Create Poll Section */}
+            <div className="card p-6">
+              <h3 className="text-xl font-bold mb-4">Create a Poll</h3>
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  value={newPoll.question}
+                  onChange={(e) => setNewPoll({...newPoll, question: e.target.value})}
+                  placeholder="What do you want to ask?"
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 text-lg font-semibold"
+                />
+                
+                <div className="space-y-2">
+                  <label className="text-sm text-neutral-400">Options:</label>
+                  {newPoll.options.map((option, index) => (
+                    <div key={index} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={option}
+                        onChange={(e) => updatePollOption(index, e.target.value)}
+                        placeholder={`Option ${index + 1}`}
+                        className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2"
+                      />
+                      {newPoll.options.length > 2 && (
+                        <button
+                          onClick={() => removePollOption(index)}
+                          className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded-lg text-red-400"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    onClick={addPollOption}
+                    className="text-sm text-teal-400 hover:text-teal-300"
+                  >
+                    + Add Option
+                  </button>
+                </div>
+                
+                <button
+                  onClick={handleAddPoll}
+                  className="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-lg font-semibold w-full"
+                >
+                  Create Poll
+                </button>
+              </div>
             </div>
           </div>
         )}

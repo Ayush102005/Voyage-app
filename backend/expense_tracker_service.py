@@ -40,6 +40,8 @@ class ExpenseTrackerService:
     def __init__(self, firestore_client=None):
         """Initialize expense tracker service"""
         self.db = firestore_client
+        # In-memory storage for testing when no Firestore
+        self._memory_expenses = []
         
     def add_expense(
         self,
@@ -101,7 +103,7 @@ class ExpenseTrackerService:
             
             print(f"✅ Expense object created successfully")
             
-            # Save to Firestore
+            # Save to Firestore or memory
             if self.db:
                 print(f"💾 Saving to Firestore collection 'expenses'...")
                 expense_ref = self.db.collection('expenses').document(expense_id)
@@ -112,7 +114,9 @@ class ExpenseTrackerService:
                 expense_ref.set(expense_dict)
                 print(f"✅ Saved to Firestore successfully")
             else:
-                print(f"⚠️ No Firestore client - expense not persisted")
+                # Store in memory for testing
+                self._memory_expenses.append(expense)
+                print(f"💾 Saved to memory storage (testing mode)")
             
             # Check if this triggers any budget alerts
             try:
@@ -132,14 +136,14 @@ class ExpenseTrackerService:
     def update_expense(
         self,
         expense_id: str,
-        updates: Dict
+        **updates
     ) -> Expense:
         """
         Update an existing expense
         
         Args:
             expense_id: Expense to update
-            updates: Dictionary of fields to update
+            **updates: Keyword arguments of fields to update
             
         Returns:
             Updated Expense object
@@ -156,8 +160,14 @@ class ExpenseTrackerService:
             expense_ref.update(updates)
             
             return Expense(**expense_data)
-        
-        raise Exception("Firestore client not initialized")
+        else:
+            # Update in memory
+            for expense in self._memory_expenses:
+                if expense.expense_id == expense_id:
+                    for key, value in updates.items():
+                        setattr(expense, key, value)
+                    return expense
+            raise Exception(f"Expense {expense_id} not found")
     
     def delete_expense(
         self,
@@ -186,6 +196,16 @@ class ExpenseTrackerService:
                 expense_ref.delete()
             
             return True
+        else:
+            # Delete from memory
+            if soft_delete:
+                for expense in self._memory_expenses:
+                    if expense.expense_id == expense_id:
+                        expense.deleted = True
+                        return True
+            else:
+                self._memory_expenses = [e for e in self._memory_expenses if e.expense_id != expense_id]
+                return True
         
         return False
     
@@ -216,22 +236,52 @@ class ExpenseTrackerService:
         total_remaining = total_budget - total_spent
         percentage_used = (total_spent / total_budget * 100) if total_budget > 0 else 0
         
-        # Calculate daily average
+        # Calculate daily average (simplified - avoid timezone issues)
         trip_start = trip_data.get('start_date')
         trip_end = trip_data.get('end_date')
         
-        if isinstance(trip_start, str):
-            trip_start = datetime.fromisoformat(trip_start)
-        if isinstance(trip_end, str):
-            trip_end = datetime.fromisoformat(trip_end)
+        # Default values
+        days_elapsed = 1
+        days_remaining = 0
+        daily_average = 0
+        projected_total = 0
         
-        now = datetime.now(timezone.utc)
-        days_elapsed = max((now - trip_start).days, 1) if trip_start else 1
-        days_remaining = max((trip_end - now).days, 0) if trip_end else 0
-        total_days = days_elapsed + days_remaining
-        
-        daily_average = total_spent / days_elapsed if days_elapsed > 0 else 0
-        projected_total = daily_average * total_days
+        try:
+            # Simple datetime handling - convert everything to naive for calculation
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            
+            if trip_start:
+                if isinstance(trip_start, str):
+                    trip_start = datetime.fromisoformat(trip_start.replace('Z', '+00:00')).replace(tzinfo=None)
+                else:
+                    # Convert any datetime to naive
+                    if hasattr(trip_start, 'replace'):
+                        trip_start = trip_start.replace(tzinfo=None)
+                
+            if trip_end:
+                if isinstance(trip_end, str):
+                    trip_end = datetime.fromisoformat(trip_end.replace('Z', '+00:00')).replace(tzinfo=None)
+                else:
+                    # Convert any datetime to naive
+                    if hasattr(trip_end, 'replace'):
+                        trip_end = trip_end.replace(tzinfo=None)
+            
+            # Calculate days only if we have valid dates
+            if trip_start:
+                days_elapsed = max((now - trip_start).days, 1)
+            if trip_end:
+                days_remaining = max((trip_end - now).days, 0)
+            
+            total_days = days_elapsed + days_remaining
+            daily_average = total_spent / days_elapsed if days_elapsed > 0 else 0
+            projected_total = daily_average * total_days
+        except Exception as e:
+            # If date calculation fails, use defaults (no crash)
+            print(f"⚠️ Date calculation warning: {str(e)}")
+            days_elapsed = 1
+            days_remaining = 0
+            daily_average = 0
+            projected_total = 0
         
         # Determine budget status
         if percentage_used >= 100:
@@ -280,7 +330,9 @@ class ExpenseTrackerService:
             projected_total=round(projected_total, 2),
             budget_status=budget_status,
             categories=categories,
+            category_breakdown=categories,  # Alias for backward compatibility
             recent_expenses=recent_expenses,
+            expenses=recent_expenses,  # Alias for backward compatibility
             total_expenses_count=len(expenses),
             days_elapsed=days_elapsed,
             days_remaining=days_remaining,
@@ -536,8 +588,11 @@ class ExpenseTrackerService:
     ) -> List[Expense]:
         """Fetch all expenses for a trip"""
         if not self.db:
-            # Return empty list for testing
-            return []
+            # Return from memory storage for testing
+            expenses = [e for e in self._memory_expenses if e.trip_id == trip_id]
+            if not include_deleted:
+                expenses = [e for e in expenses if not e.deleted]
+            return expenses
         
         query = self.db.collection('expenses').where('trip_id', '==', trip_id)
         

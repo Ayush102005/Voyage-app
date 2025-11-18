@@ -15,6 +15,28 @@ const LoginPage = () => {
 
   const checkProfileAndNavigate = async (userId: string) => {
     try {
+      // Get Firebase token
+      const firebaseUser = auth.currentUser
+      const token = firebaseUser ? await firebaseUser.getIdToken() : ''
+      
+      // Check profile status from backend (includes phone verification)
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const profileResponse = await fetch(`${apiUrl}/api/profile/status`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (profileResponse.ok) {
+        const profileStatus = await profileResponse.json()
+        
+        // If no phone number, redirect to phone verification
+        if (!profileStatus.has_phone_number || !profileStatus.phone_verified) {
+          navigate('/phone-verification')
+          return
+        }
+      }
+      
       // Check if user profile exists in Firestore
       const userDoc = await getDoc(doc(db, 'users', userId))
       

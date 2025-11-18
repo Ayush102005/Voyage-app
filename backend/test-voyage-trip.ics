@@ -1,0 +1,40 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Voyage Travel App//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Voyage Trip - Rishikesh Adventure
+X-WR-TIMEZONE:Asia/Kolkata
+BEGIN:VEVENT
+UID:test-event-1@voyage-app.com
+DTSTAMP:20251118T070227Z
+DTSTART:20251118T123227
+DTEND:20251118T143227
+SUMMARY:🧘 Yoga Session at Parmarth Niketan
+DESCRIPTION:Morning yoga by the Ganges\nDuration: 2 hours\nLocation: Parmarth Niketan Ashram
+LOCATION:Parmarth Niketan, Rishikesh, Uttarakhand
+STATUS:CONFIRMED
+SEQUENCE:0
+BEGIN:VALARM
+TRIGGER:-PT30M
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Yoga Session at Parmarth Niketan in 30 minutes
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:test-event-2@voyage-app.com
+DTSTAMP:20251118T070227Z
+DTSTART:20251118T153227
+DTEND:20251118T173227
+SUMMARY:🏞️ River Rafting Adventure
+DESCRIPTION:White water rafting on the Ganges\nDifficulty: Grade II-III\nDuration: 2 hours
+LOCATION:Shivpuri, Rishikesh
+STATUS:CONFIRMED
+SEQUENCE:0
+BEGIN:VALARM
+TRIGGER:-PT1H
+ACTION:DISPLAY
+DESCRIPTION:Reminder: River Rafting Adventure in 1 hour
+END:VALARM
+END:VEVENT
+END:VCALENDAR

@@ -17,6 +17,14 @@ from models import User
 
 load_dotenv()
 
+
+# Module-level function for backward compatibility
+def verify_firebase_token(token: str):
+    """Verify Firebase JWT token (placeholder for compatibility)"""
+    # This would use Firebase Admin SDK in production
+    raise NotImplementedError("Use Firebase Admin SDK for token verification")
+
+
 # Configuration from environment variables
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")

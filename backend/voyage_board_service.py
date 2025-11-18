@@ -20,8 +20,7 @@ from schemas import (
     VoyageBoardComment,
     VoyageBoardSuggestion,
     VoyageBoardActivityUpdate,
-    VoyageBoardPoll,
-    VoyageBoardPollOption
+    VoyageBoardPoll
 )
 
 
@@ -50,11 +49,11 @@ class VoyageBoardService:
         random_part = ''.join(secrets.choice(chars) for _ in range(5))
         return f"VOYAGE-{random_part}"
     
-    def generate_share_link(self, board_id: str, base_url: str = "https://voyage.in") -> str:
+    def generate_share_link(self, board_id: str, base_url: str = "http://localhost:3000") -> str:
         """
         Generate shareable link for a board
         """
-        return f"{base_url}/board/{board_id}"
+        return f"{base_url}/voyage-board/{board_id}"
     
     def generate_access_code(self) -> str:
         """
@@ -595,29 +594,18 @@ class VoyageBoardService:
         if not board:
             return None
         
-        # Generate poll and option IDs
+        # Generate poll ID
         poll_id = f"poll_{secrets.token_urlsafe(8)}"
         
-        # Create poll options
-        poll_options = []
-        for idx, option_text in enumerate(options):
-            option = VoyageBoardPollOption(
-                option_id=f"opt_{poll_id}_{idx}",
-                option_text=option_text,
-                votes=[]
-            )
-            poll_options.append(option)
-        
-        # Create poll
+        # Create poll with simple structure
         poll = VoyageBoardPoll(
             poll_id=poll_id,
             question=question,
-            options=poll_options,
+            options=options,
+            votes={},
             created_by=user_id,
-            created_by_name=user_name,
-            created_at=datetime.now(),
-            allow_multiple=allow_multiple,
-            is_closed=False
+            creator_name=user_name,
+            created_at=datetime.now().isoformat()
         )
         
         board.polls.append(poll)
@@ -642,12 +630,12 @@ class VoyageBoardService:
         self,
         board_id: str,
         poll_id: str,
-        option_id: str,
+        option_index: int,
         user_id: str
     ) -> Optional[VoyageBoard]:
         """
-        Vote on a poll option
-        If allow_multiple is False, removes previous votes from other options
+        Vote on a poll option using index
+        Updates votes dict with user_id -> option_index mapping
         """
         board = self.get_board(board_id)
         
@@ -656,23 +644,17 @@ class VoyageBoardService:
         
         for poll in board.polls:
             if poll.poll_id == poll_id:
-                if poll.is_closed:
-                    return None  # Poll is closed
+                # Validate option index
+                if option_index < 0 or option_index >= len(poll.options):
+                    return None  # Invalid option index
                 
-                # If not allowing multiple votes, remove user's vote from other options
-                if not poll.allow_multiple:
-                    for option in poll.options:
-                        if user_id in option.votes:
-                            option.votes.remove(user_id)
-                
-                # Add vote to selected option (toggle if already voted for this option)
-                for option in poll.options:
-                    if option.option_id == option_id:
-                        if user_id in option.votes:
-                            option.votes.remove(user_id)  # Toggle off
-                        else:
-                            option.votes.append(user_id)  # Vote
-                        break
+                # Check if already voted for this option
+                if user_id in poll.votes and poll.votes[user_id] == option_index:
+                    # Toggle off - remove vote
+                    del poll.votes[user_id]
+                else:
+                    # Vote for this option
+                    poll.votes[user_id] = option_index
                 
                 break
         

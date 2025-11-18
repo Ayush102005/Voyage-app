@@ -1,8 +1,8 @@
+
 # =========================
-# Authentication Endpoints
+# Core Imports & App Setup
 # =========================
 import os
-import secrets
 from typing import List, Optional, Union
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Depends, Body, Header, Request
@@ -11,63 +11,49 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-import uvicorn
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage
-from langgraph.prebuilt import create_react_agent
-from google.cloud import firestore
 
+# =========================
+# AI & Service Imports
+# =========================
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.prebuilt import create_react_agent
+
+# =========================
+# Load Environment & Firebase
+# =========================
 load_dotenv()
 from firebase_config import initialize_firebase
 initialize_firebase()
 
+# =========================
+# Models
+# =========================
+class TokenRequest(BaseModel):
+    token: str
+
+# =========================
+# FastAPI App Initialization
+# =========================
 app = FastAPI(
     title="Voyage Travel Planner API",
     description="AI-powered travel planning orchestrator with Firebase authentication",
     version="1.0.0"
 )
 
-# Configure CORS based on environment
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-if ENVIRONMENT == "production":
-    # In production, only allow specific origins
-    allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
-    if not allowed_origins or allowed_origins == [""]:
-        allowed_origins = ["https://voyage-app.vercel.app"]  # Default production frontend
-else:
-    # In development, allow all origins
-    allowed_origins = ["*"]
-
+# =========================
+# CORS Configuration
+# =========================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["*"],  # Allow all origins for development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Health check endpoint
-@app.get("/")
-def read_root():
-    return {"message": "Voyage backend is running."}
-
-class TokenRequest(BaseModel):
-    token: str
-
-class AuthRequest(BaseModel):
-    token: str
-
-@app.post("/api/auth/verify")
-def verify_token(request: AuthRequest):
-    """
-    Verifies Firebase ID token and returns user info.
-    """
-    try:
-        from firebase_auth import verify_firebase_token
-        user_info = verify_firebase_token(request.token)
-        return {"success": True, "user": user_info}
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+# =========================
+# Database & Auth Imports
+# =========================
 from database import get_db
 from sqlalchemy.orm import Session
 
@@ -90,7 +76,7 @@ from schemas import (
     FlightBookingParams, HotelBookingParams, TrainBookingParams, ActivityBookingParams,
     CreateVoyageBoardRequest, CreateVoyageBoardResponse, VoyageBoardResponse,
     AddCommentRequest, AddSuggestionRequest, VoteOnSuggestionRequest,
-    ResolveSuggestionRequest, CreatePollRequest, VoteOnPollRequest,
+    ResolveSuggestionRequest, CreatePollRequest, VoteOnPollRequest, LikeCommentRequest,
     GoogleCalendarExportRequest, GoogleCalendarExportResponse, CalendarEvent,
     FindFreeWeekendRequest, FindFreeWeekendResponse, SmartScheduleRequest,
     SmartScheduleResponse, UserCalendarEvent,
@@ -139,6 +125,7 @@ async def validation_exception_handler(request, exc):
     )
 # =========================
 # Login Endpoint
+
 
 @app.post("/api/login")
 async def login(request: TokenRequest):
@@ -198,12 +185,41 @@ async def login(request: TokenRequest):
         else:
             raise HTTPException(status_code=401, detail=str(e))
 
+
+@app.get("/api/dashboard", response_model=UserDashboardResponse)
+async def get_dashboard(current_user: FirebaseUser = Depends(get_current_user)):
+    """
+    Fetches and returns all data for the main user dashboard.
+    Requires authentication.
+    """
+    try:
+        print(f"📊 Fetching dashboard for user: {current_user.uid}")
+        
+        # Get dashboard data from the service
+        dashboard_service = get_dashboard_service(firestore_service.db, firestore_service)
+        dashboard_data = dashboard_service.get_user_dashboard(current_user.uid, current_user.email)
+        
+        # The frontend expects a specific structure, so we'll adapt
+        return UserDashboardResponse(
+            success=True,
+            message="Dashboard fetched successfully",
+            user_info=getattr(dashboard_data, 'user_info', {}),
+            upcoming_trip=getattr(dashboard_data, 'upcoming_trip', None),
+            past_trips=getattr(dashboard_data, 'past_trips', []),
+            saved_destinations=getattr(dashboard_data, 'saved_destinations', []),
+            personalized_suggestions=getattr(dashboard_data, 'personalized_suggestions', []),
+            quick_actions=getattr(dashboard_data, 'quick_actions', []),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred while fetching dashboard data: {e}")
+
 google_api_key = os.getenv("GOOGLE_API_KEY")
 if not google_api_key:
     # Keep a minimal body here to avoid IndentationError
     # Features that require Google APIs will gracefully degrade if key is missing
     print("⚠️ GOOGLE_API_KEY not set. Some Google-powered features may be disabled.")
 
+# ============================================================================
 # ============================================================================
 
 class TrendingCache:
@@ -247,7 +263,16 @@ def generate_unsplash_url(query: str, width: int = 800, height: int = 600) -> st
     """
     Generate image URL using Lorem Picsum (reliable placeholder service).
     Note: Unsplash Source API was deprecated. Using Lorem Picsum instead.
+    
+    Args:
+        query: Search query (for hash generation)
+        width: Image width in pixels (default 800)
+        height: Image height in pixels (default 600)
+    
+    Returns:
+        Image URL from Lorem Picsum
     """
+    # Use hash of query to get consistent random image
     import hashlib
     hash_val = int(hashlib.md5(query.encode()).hexdigest(), 16) % 1000
     return f"https://picsum.photos/id/{hash_val}/{width}/{height}"
@@ -362,6 +387,7 @@ def cache_research(destination: str, data: dict):
     research_cache_timestamps[destination] = datetime.now()
     print(f"💾 Cached research data for {destination}")
 
+
 # ============================================================================
 # MASTER PROMPT CREATORS
 # ============================================================================
@@ -428,15 +454,6 @@ This traveler has specific preferences that MUST be respected:
     
     prompt = f"""
 You are an expert travel AI assistant designed for Indian travelers exploring destinations worldwide. You have deep knowledge of global destinations, understand Indian traveler preferences, cultural context, and budget considerations. All pricing is in Indian Rupees (₹). Your role is to create personalized, practical trip itineraries that feel natural and conversational for Indian users.
-
-🚨🚨🚨 MANDATORY REQUIREMENT - BOOKING LINKS 🚨🚨🚨
-EVERY hotel, flight, restaurant, and activity MUST have ACTUAL clickable booking links.
-- Hotels: MUST call get_booking_link("Hotel Name", "City") and insert the REAL URL returned
-- Flights: MUST create proper MakeMyTrip URLs with ACTUAL dates from the trip
-- Restaurants: MUST create Zomato URLs
-- NO placeholders, NO "use tool here", ONLY REAL WORKING LINKS
-If you don't include real booking links, the itinerary will be REJECTED.
-🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 **Trip Context:**
 **🎯 YOUR TRIP DETAILS:**
@@ -965,45 +982,45 @@ Day 1: Arrival & [Descriptive Title]
 *Add 1-2 images per day showing the main attractions/activities using Unsplash format*
 *Example: ![Red Fort Delhi](https://source.unsplash.com/1600x900/?red-fort,delhi)*
 
-**✈️ Arrival:**
+✈️ Arrival:
 • Land at {trip_details.destination} Airport/Station [Estimated time]
 • Airport/Station to Hotel: [Specific transport - Ola/Uber/Prepaid Taxi] (₹[Cost], [Duration])
-• Tip: Book [Ola/Uber] in advance for convenience
+  Tip: Book [Ola/Uber] in advance for convenience
 
-**Morning/Afternoon (After Check-in):**
+Morning/Afternoon (After Check-in):
 • 🚗 Hotel to [Activity Location]: [Mode like Ola/Uber/Metro] (₹[Cost])
 • [Activity Name] - ₹[Cost]
-  - Why: [Brief, compelling reason this is included]
-  - **📱 IF BOOKABLE ONLINE, ADD LINK:** [Book This Activity](https://bookmyshow.com/... or official-website)
+  Why: [Brief, compelling reason this is included]
+  **📱 IF BOOKABLE ONLINE, ADD LINK:** [Book This Activity](https://bookmyshow.com/... or official-website)
   
-**Afternoon (12:00 PM - 6:00 PM):**
+Afternoon (12:00 PM - 6:00 PM):
 • 🚗 [Location A] to [Location B]: [Mode] (₹[Cost])
 • [Activity Name] - ₹[Cost]
-  - Why: [What makes this special]
-  - **📱 IF BOOKABLE, ADD LINK:** [Book Tickets](booking-url)
+  Why: [What makes this special]
+  **📱 IF BOOKABLE, ADD LINK:** [Book Tickets](booking-url)
   
-**Evening (6:00 PM onwards):**
+Evening (6:00 PM onwards):
 • 🚗 [Location] to [Evening spot]: [Mode] (₹[Cost])
 • [Activity Name] - ₹[Cost]
-  - Why: [How this completes the day]
-  - **📱 IF BOOKABLE, ADD LINK:** [Reserve/Book](booking-url)
+  Why: [How this completes the day]
+  **📱 IF BOOKABLE, ADD LINK:** [Reserve/Book](booking-url)
 • 🚗 Return to hotel: [Mode] (₹[Cost])
 
-**🍽️ Food:**
-• **Breakfast:** [Specific place] - [Signature dish] (₹[Price])
-  - **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
-  - Replace spaces with hyphens, lowercase, format: zomato.com/[city]/[restaurant-name]
-• **Lunch:** [Specific place] - [Must-try item] (₹[Price])
-  - **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
-• **Dinner:** [Specific place] - [Local specialty] (₹[Price])
-  - **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
+🍽️ Food: 
+• Breakfast: [Specific place] - [Signature dish] (₹[Price])
+  **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
+  Replace spaces with hyphens, lowercase, format: zomato.com/[city]/[restaurant-name]
+• Lunch: [Specific place] - [Must-try item] (₹[Price])
+  **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
+• Dinner: [Specific place] - [Local specialty] (₹[Price])
+  **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
 
-**🏨 Accommodation:** [Specific hotel name] - ₹[Price/night]
-• Why this choice: [Brief explanation of why this property suits their budget tier]
-• **📱 MANDATORY FORMAT - USE SQUARE BRACKETS [ ] AND PARENTHESES ( ) WITH get_booking_link TOOL:**
-• **WRONG FORMAT: **📱 Book This Hotel** or **📱 [Book Hotel](use-tool)****
-• **CORRECT FORMAT: **📱 [Book This Hotel](https://www.makemytrip.com/hotels/tea-county-munnar-details.html)****
-• CALL get_booking_link("hotel_name_here", "city_name_here") tool and copy the returned URL into parentheses!
+🏨 Accommodation: [Specific hotel name] - ₹[Price/night]
+   Why this choice: [Brief explanation of why this property suits their budget tier]
+   **📱 MANDATORY FORMAT - USE SQUARE BRACKETS [ ] AND PARENTHESES ( ) WITH get_booking_link TOOL:**
+   **WRONG FORMAT: **📱 Book This Hotel** or **📱 [Book Hotel](use-tool)****
+   **CORRECT FORMAT: **📱 [Book This Hotel](https://www.makemytrip.com/hotels/tea-county-munnar-details.html)****
+   CALL get_booking_link("hotel_name_here", "city_name_here") tool and copy the returned URL into parentheses!
 
 [Repeat for each day]
 
@@ -1297,6 +1314,7 @@ Begin planning now!
 """
     return prompt
 
+
 def create_replanning_prompt(trip_details: TripDetails, research_data: dict, shortfall: float) -> str:
     """
     Creates the master prompt for RE-PLANNING (budget is insufficient).
@@ -1520,6 +1538,7 @@ Begin re-planning now!
 """
     return prompt
 
+
 # ============================================================================
 # MAIN ORCHESTRATOR ENDPOINT
 # ============================================================================
@@ -1544,31 +1563,20 @@ async def plan_trip_from_prompt(
         print(f"📝 Prompt: {request.prompt}")
         
         # ====================================================================
-        # STEP 0: Check if this is a follow-up to a previous incomplete request
+        # STEP 0: DETERMINE INTENT (Trip Planning vs Conversation)
         # ====================================================================
-        if request.previous_extraction:
-            print(f"📋 Continuing conversation with previous extraction")
-            print(f"   Previous details: {request.previous_extraction}")
-            # Skip intent classification - this is clearly a follow-up answer
-            intent = "TRIP_PLANNING"
-        else:
-            # ====================================================================
-            # DETERMINE INTENT (Trip Planning vs Conversation) - Only for new requests
-            # ====================================================================
-            intent_llm = ChatGoogleGenerativeAI(
-                model="models/gemini-2.5-flash",
-                temperature=0.3,
-                google_api_key=os.getenv("GOOGLE_API_KEY")
-            )
-            
-            intent_check_prompt = f"""
+        intent_llm = ChatGoogleGenerativeAI(
+            model="models/gemini-2.5-flash",
+            temperature=0.3,
+            google_api_key=os.getenv("GOOGLE_API_KEY")
+        )
+        
+        intent_check_prompt = f"""
 Analyze this user message and determine what they want:
 
 User message: "{request.prompt}"
 
 Classify as ONE of these:
-- "OPTIMIZE_DAY" if asking to optimize their day/schedule during a trip (e.g., "optimize my day", "optimize day for Goa trip", "help optimize my schedule")
-- "TRACK_EXPENSES" if asking to track expenses for a trip (e.g., "track expenses", "expense tracker for my trip", "track spending")
 - "TRIP_PLANNING" if provides trip details (destination + any of: days/budget/origin) OR clearly wants an itinerary
 - "MODIFICATION_REQUEST" if asking to modify a plan (e.g., "use whole budget", "upgrade", "more activities") WITHOUT complete trip details
 - "DESTINATION_INQUIRY" if asking about a place but might want to plan a trip (e.g., "tell me about Kashmir", "what's good in Goa")
@@ -1578,8 +1586,6 @@ Classify as ONE of these:
 - "OTHER" if cannot determine or very generic question
 
 **Examples:**
-- "Optimize my day for Goa trip" → OPTIMIZE_DAY
-- "Track expenses for my Kerala trip" → TRACK_EXPENSES
 - "5 day Goa trip" → TRIP_PLANNING
 - "Plan Kashmir trip from Delhi 50000 budget" → TRIP_PLANNING
 - "Use whole budget make it luxury" → MODIFICATION_REQUEST
@@ -1590,11 +1596,11 @@ Classify as ONE of these:
 - "What to pack for Manali?" → ADVICE
 - "Hello" / "Thanks" → GREETING
 
-Respond with ONLY ONE WORD: OPTIMIZE_DAY, TRACK_EXPENSES, TRIP_PLANNING, MODIFICATION_REQUEST, DESTINATION_INQUIRY, RECOMMENDATION, ADVICE, GREETING, or OTHER
+Respond with ONLY ONE WORD: TRIP_PLANNING, MODIFICATION_REQUEST, DESTINATION_INQUIRY, RECOMMENDATION, ADVICE, GREETING, or OTHER
 """
-            
-            intent_response = intent_llm.invoke(intent_check_prompt)
-            intent = intent_response.content.strip().upper()
+        
+        intent_response = intent_llm.invoke(intent_check_prompt)
+        intent = intent_response.content.strip().upper()
         
         print(f"🎯 Intent detected: {intent}")
         
@@ -1630,97 +1636,6 @@ Keep it under 2 sentences, warm tone, end with trip planning invitation.
                 success=True,
                 message="Greeting",
                 trip_plan=greeting_response.content.strip(),
-                trip_id=None,
-                extracted_details=None
-            )
-        
-        # ====================================================================
-        # HANDLE OPTIMIZE DAY
-        # ====================================================================
-        if intent == "OPTIMIZE_DAY":
-            # Extract trip/location from the message
-            optimize_response = smart_llm.invoke(f"""
-User said: "{request.prompt}"
-
-They want to optimize their day during a trip. Extract the location/trip name if mentioned.
-
-Provide this helpful response:
-
-"🚀 **Day Optimizer Feature**
-
-I'd love to help optimize your day! To create the perfect schedule, I need a few details:
-
-**Please provide:**
-• Which trip/destination? (e.g., "Goa", "Kerala trip")
-• What day of your trip is it? (e.g., "Day 2", "today")
-• Current time (optional)
-• What activities have you already completed today?
-• Any preferences? (relaxed pace, pack in activities, specific interests)
-
-**Example:** "Optimize day 3 of my Goa trip - already visited Fort Aguada, want beach time and seafood"
-
-Once I have these details, I'll create an optimized schedule for the rest of your day with:
-✓ Time-efficient routing
-✓ Best activities for remaining time
-✓ Food recommendations
-✓ Budget-conscious suggestions"
-
-Keep it friendly and actionable!
-""")
-            
-            return TripResponse(
-                success=True,
-                message="Optimize Day",
-                trip_plan=optimize_response.content.strip(),
-                trip_id=None,
-                extracted_details=None
-            )
-        
-        # ====================================================================
-        # HANDLE TRACK EXPENSES
-        # ====================================================================
-        if intent == "TRACK_EXPENSES":
-            # Extract trip/location from the message
-            expense_response = smart_llm.invoke(f"""
-User said: "{request.prompt}"
-
-They want to track expenses for a trip. Extract the location/trip name if mentioned.
-
-Provide this helpful response:
-
-"💰 **Expense Tracker Feature**
-
-I can help you track your trip expenses! To get started, I need:
-
-**Basic Info:**
-• Which trip? (e.g., "Goa trip", "Kerala vacation")
-• Total budget for the trip
-• Trip duration (start date - end date)
-• Number of travelers
-
-**Then you can:**
-• Add expenses: "Add ₹500 for lunch"
-• Track by category: Food, Transport, Accommodation, Activities, Shopping
-• Get spending insights
-• See remaining budget
-• Split expenses among travelers
-
-**Example:** "Track expenses for my 5-day Goa trip, budget ₹30,000, started Nov 10"
-
-After setup, you can add expenses anytime:
-- "Spent ₹1200 on dinner at Thalassa"
-- "Taxi to airport cost ₹800"
-- "Paid ₹3500 for water sports"
-
-I'll keep track of everything and show you spending insights! 📊"
-
-Make it encouraging and clear!
-""")
-            
-            return TripResponse(
-                success=True,
-                message="Track Expenses",
-                trip_plan=expense_response.content.strip(),
                 trip_id=None,
                 extracted_details=None
             )
@@ -1898,12 +1813,6 @@ The user's new message "{request.prompt}" is providing ADDITIONAL information. Y
 
 For example, if the user already said destination is "Paris" but now says "from Mumbai", keep destination="Paris" and update origin_city="Mumbai".
 """
-        
-        # Calculate reference dates for extraction
-        from datetime import datetime, timedelta
-        today = datetime.now()
-        next_week_date = (today + timedelta(days=7)).strftime('%Y-%m-%d')
-        next_month_date = (today.replace(day=1) + timedelta(days=32)).replace(day=7).strftime('%Y-%m-%d')
         
         extractor_llm = ChatGoogleGenerativeAI(
             model="models/gemini-2.5-flash",
@@ -2152,6 +2061,7 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
             cache_research(trip_details.destination, research_data)
             print("✅ Research completed with real-time weather and alerts (parallel execution)")
         
+        
         # ====================================================================
         # STEP 3: VALIDATE BUDGET & CLASSIFY TIER (Dynamic Feasibility Check)
         # ====================================================================
@@ -2276,40 +2186,17 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
         user_preferences = None
         try:
             if firestore_service.db is not None:
-                # First try to get preferences from the 'users' collection (from profile quiz)
-                prefs_from_users = firestore_service.get_user_preferences(user_id=current_user.uid)
-                
-                # Also get user profile (for learned preferences)
                 profile = firestore_service.get_user_profile(user_id=current_user.uid)
-                
-                # Merge both sources of preferences
-                if prefs_from_users or profile:
-                    user_preferences = {
-                        "preferences": {},
-                        "learned_preferences": {}
-                    }
-                    
-                    # Add quiz preferences from 'users' collection
-                    if prefs_from_users:
-                        print(f"✅ Loaded user quiz preferences")
-                        # Map quiz fields to the expected format
-                        quiz_prefs = {
-                            "travel_style": [prefs_from_users.get("travelStyle", "")],
-                            "interests": prefs_from_users.get("interests", []),
-                            "budget_preference": prefs_from_users.get("budgetPreference", ""),
-                        }
-                        user_preferences["preferences"] = quiz_prefs
-                        
-                        if quiz_prefs.get("travel_style"):
-                            print(f"   - Travel Style: {quiz_prefs['travel_style'][0]}")
-                        if quiz_prefs.get("interests"):
-                            print(f"   - Interests: {', '.join(quiz_prefs['interests'])}")
-                        if quiz_prefs.get("budget_preference"):
-                            print(f"   - Budget Preference: {quiz_prefs['budget_preference']}")
-                    
-                    # Add learned preferences from user_profiles collection
-                    if profile and profile.get("learned_preferences"):
-                        user_preferences["learned_preferences"] = profile["learned_preferences"]
+                if profile and (profile.get("preferences") or profile.get("learned_preferences")):
+                    user_preferences = profile
+                    print(f"✅ Loaded user preferences for personalization")
+                    if profile.get("preferences"):
+                        prefs = profile["preferences"]
+                        if prefs.get("interests"):
+                            print(f"   - Interests: {', '.join(prefs['interests'])}")
+                        if prefs.get("travel_style"):
+                            print(f"   - Style: {', '.join(prefs['travel_style'])}")
+                    if profile.get("learned_preferences"):
                         learned = profile["learned_preferences"]
                         if learned.get("spending_pattern"):
                             print(f"   - Learned Pattern: {learned['spending_pattern']}")
@@ -2341,8 +2228,8 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
             model="models/gemini-2.0-flash-exp",  # Faster model
             temperature=0.7,
             google_api_key=os.getenv("GOOGLE_API_KEY"),
-            max_output_tokens=8192,  # Increased limit for full itinerary
-            timeout=60  # Increased timeout for longer responses
+            max_output_tokens=2048,  # Limit output length
+            timeout=30  # Add timeout to prevent hanging
         )
         
         # Create LangGraph React agent (without state_modifier - not supported in newer versions)
@@ -2447,6 +2334,7 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
         print(f"❌ Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Planning failed: {str(e)}")
 
+
 # ============================================================================
 # FIREBASE-PROTECTED ENDPOINTS (Require Authentication)
 # ============================================================================
@@ -2471,6 +2359,42 @@ async def get_user_trip_plans(
         return trips
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch trip plans: {str(e)}")
+
+
+@app.get("/api/trip-plans/share/{trip_id}", response_model=dict)
+async def get_shared_trip_plan(
+    trip_id: str,
+    current_user: Optional[FirebaseUser] = Depends(get_optional_user)
+):
+    """
+    Get a trip plan via share link.
+    Anyone with the link can view the trip - this is a share endpoint.
+    """
+    try:
+        # Try to get the trip plan
+        trip_ref = firestore_service.db.collection('trip_plans').document(trip_id)
+        trip_doc = trip_ref.get()
+        
+        if not trip_doc.exists:
+            raise HTTPException(status_code=404, detail="Trip plan not found")
+        
+        trip = trip_doc.to_dict()
+        trip['id'] = trip_id
+        
+        # Share links are public - anyone with the link can view
+        # No need to check is_public or ownership for share endpoint
+        
+        # Transform itinerary field to trip_plan for frontend compatibility
+        if 'itinerary' in trip:
+            trip['trip_plan'] = trip['itinerary']
+        
+        return trip
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error fetching shared trip: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch trip plan: {str(e)}")
+
 
 @app.get("/api/trip-plans/{trip_id}", response_model=dict)
 async def get_trip_plan(
@@ -2499,44 +2423,6 @@ async def get_trip_plan(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch trip plan: {str(e)}")
 
-@app.get("/api/trip-plans/share/{trip_id}", response_model=dict)
-async def get_shared_trip_plan(
-    trip_id: str,
-    current_user: Optional[FirebaseUser] = Depends(get_optional_user)
-):
-    """
-    Get a shared trip plan by ID. Can be accessed without authentication if trip is public.
-    If authenticated, allows access to trips you own or have been shared with.
-    """
-    try:
-        # Try to get trip from Firestore directly
-        trip_ref = firestore_service.db.collection('trip_plans').document(trip_id)
-        trip_doc = trip_ref.get()
-        
-        if not trip_doc.exists:
-            raise HTTPException(status_code=404, detail="Trip plan not found")
-        
-        trip = trip_doc.to_dict()
-        trip['id'] = trip_doc.id
-        
-        # Check if user has access
-        is_owner = current_user and trip.get('user_id') == current_user.uid
-        is_public = trip.get('is_public', False)  # Default to private if not set
-        
-        # Allow access if: user owns it, it's public, or user is authenticated (for collaboration)
-        if not (is_owner or is_public or current_user):
-            raise HTTPException(status_code=403, detail="This trip is private")
-        
-        # Transform itinerary field to trip_plan for frontend compatibility
-        if 'itinerary' in trip:
-            trip['trip_plan'] = trip['itinerary']
-        
-        return trip
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error fetching shared trip: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch trip plan: {str(e)}")
 
 @app.delete("/api/trip-plans/{trip_id}")
 async def delete_trip_plan(
@@ -2561,34 +2447,6 @@ async def delete_trip_plan(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete trip plan: {str(e)}")
 
-@app.put("/api/trip-plans/{trip_id}")
-async def update_trip_plan(
-    trip_id: str,
-    itinerary: str = Body(...),
-    current_user: FirebaseUser = Depends(get_current_user)
-):
-    """
-    Update a trip plan's itinerary.
-    """
-    try:
-        updates = {
-            'itinerary': itinerary
-        }
-        
-        success = firestore_service.update_trip_plan(
-            trip_id=trip_id,
-            user_id=current_user.uid,
-            updates=updates
-        )
-        
-        if not success:
-            raise HTTPException(status_code=404, detail="Trip plan not found or unauthorized")
-        
-        return {"success": True, "message": "Trip plan updated successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update trip plan: {str(e)}")
 
 @app.patch("/api/trip-plans/{trip_id}/status")
 async def update_trip_status(
@@ -2623,6 +2481,7 @@ async def update_trip_status(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update trip status: {str(e)}")
 
+
 @app.post("/api/replan", response_model=TripResponse)
 async def replan_trip(
     trip_id: str,
@@ -2640,39 +2499,132 @@ async def replan_trip(
         print(f"Trip ID: {trip_id}")
         print(f"Feedback: {user_feedback}")
         
-        # Get existing trip
-        trip = firestore_service.get_trip_plan_by_id(trip_id, current_user.uid)
-        if not trip:
-            raise HTTPException(status_code=404, detail="Trip plan not found")
+        # Get original trip
+        original_trip = firestore_service.get_trip_plan_by_id(trip_id, current_user.uid)
+        if not original_trip:
+            raise HTTPException(status_code=404, detail="Trip not found")
         
-        destination = trip.get('destination', 'Unknown')
-        original_plan = trip.get('trip_plan', '')
+        # Extract original details
+        original_prompt = original_trip.get('original_prompt', '')
+        original_plan = original_trip.get('trip_plan', '') or original_trip.get('itinerary', '')
+        destination = original_trip.get('destination', '')
+        duration = original_trip.get('duration', 3)
+        num_people = original_trip.get('num_people', 1)
+        budget = original_trip.get('budget', 0)
+        start_date = original_trip.get('start_date', '')
         
-        # Create replanning agent
-        llm = ChatGoogleGenerativeAI(
-            model="models/gemini-2.5-flash",
-            temperature=0.7,
-            google_api_key=os.getenv("GOOGLE_API_KEY")
+        # Initialize LLM
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", api_key=google_api_key)
+        
+        # STEP 1: Intelligently interpret the user's feedback
+        print("🧠 Analyzing user feedback...")
+        interpretation_prompt = f"""You are analyzing user feedback for trip replanning.
+
+ORIGINAL TRIP DETAILS:
+- Destination: {destination}
+- Duration: {duration} days
+- People: {num_people}
+- Budget: ₹{budget}
+
+USER'S FEEDBACK: "{user_feedback}"
+
+ORIGINAL PLAN EXCERPT:
+{original_plan[:500]}...
+
+Analyze the feedback and determine:
+1. What specific changes does the user want?
+2. What should be adjusted? (budget, activities, pace, accommodation style, food, etc.)
+3. What constraints should be maintained? (dates, destination, number of people)
+4. Any specific preferences mentioned? (adventure, relaxation, culture, food, shopping, etc.)
+
+Provide your analysis in a structured way."""
+        
+        feedback_analysis = llm.invoke(interpretation_prompt).content
+        print(f"📝 Feedback Analysis:\n{feedback_analysis}\n")
+        
+        # Create replanning-specific agent with enhanced understanding
+        agent = create_react_agent(
+            llm,
+            tools=RESEARCH_TOOLS + PLANNING_TOOLS,
+            state_modifier=f"""You are Anya, an expert AI travel planner from Voyage.
+
+CRITICAL: You MUST carefully read and understand the user's feedback before replanning.
+
+ORIGINAL TRIP DETAILS:
+- Destination: {destination}
+- Duration: {duration} days
+- People: {num_people}
+- Budget: ₹{budget}
+- Start Date: {start_date}
+
+ORIGINAL PLAN SUMMARY:
+{original_plan[:1000]}...
+
+USER'S FEEDBACK: "{user_feedback}"
+
+FEEDBACK ANALYSIS:
+{feedback_analysis}
+
+YOUR MISSION:
+1. **UNDERSTAND THE FEEDBACK**: Read what the user wants carefully. Common requests:
+   - "cheaper"/"budget" → Find budget hotels, local transport, free activities
+   - "luxury"/"premium" → Upgrade hotels, private transport, fine dining
+   - "adventure" → Add trekking, water sports, adventure activities
+   - "relaxing"/"peaceful" → Spa, nature, slow pace, avoid crowds
+   - "cultural"/"authentic" → Local experiences, heritage sites, traditional food
+   - "romantic" → Couple activities, scenic spots, candlelight dinners
+   - "family-friendly" → Kid activities, safe places, family restaurants
+   - "food-focused" → More restaurants, food tours, cooking classes
+   - "faster pace" → Pack more activities per day
+   - "slower pace" → Reduce activities, add relaxation time
+
+2. **RESEARCH WITH THE FEEDBACK IN MIND**: Use your tools to find options that match the feedback
+
+3. **CREATE A COMPLETELY NEW PLAN** that directly addresses the feedback
+
+4. **EXPLAIN YOUR CHANGES**: Show what you changed and why it addresses their concern
+
+FORMAT YOUR RESPONSE:
+
+## 🔄 What I Changed Based on Your Feedback
+
+[Clearly explain what you understood from "{user_feedback}" and what specific changes you made]
+
+## 📋 Your Replanned {duration}-Day Itinerary for {destination}
+
+**Day 1: [Title]**
+- Morning: ...
+- Afternoon: ...
+- Evening: ...
+- Accommodation: [Name with booking link]
+
+[Continue for all days]
+
+## 💰 Updated Budget Breakdown
+
+| Item | Cost |
+|------|------|
+| ... | ... |
+| **Grand Total** | **₹...** |
+
+## ✅ Why This New Plan Works Better
+
+[Explain how this addresses "{user_feedback}"]
+
+IMPORTANT: Make SUBSTANTIAL changes that directly address "{user_feedback}". Don't just tweak minor details!"""
         )
-        agent = create_react_agent(llm, PLANNING_TOOLS)
-        
-        replanning_master_prompt = f"""
-You are replanning a trip to {destination} based on user feedback: "{user_feedback}"
-
-Original Plan:
-{original_plan}
-
-Please create an UPDATED plan that addresses the feedback. Make SUBSTANTIAL changes!
-"""
         
         print("🤖 Replanning agent created, starting execution...")
         
         # Run agent
-        result = agent.invoke({"messages": [("user", replanning_master_prompt)]})
+        result = agent.invoke({
+            "messages": [("user", f"Replan the trip to {destination} based on this feedback: {user_feedback}")]
+        })
+        
         final_output = result['messages'][-1].content
-
+        
         print("✅ Replanning complete!")
-
+        
         # Update the trip in database
         firestore_service.update_trip_plan(
             trip_id=trip_id,
@@ -2684,16 +2636,40 @@ Please create an UPDATED plan that addresses the feedback. Make SUBSTANTIAL chan
                 'updated_at': datetime.utcnow()
             }
         )
-
+        
         return TripResponse(
+            success=True,
             trip_id=trip_id,
             trip_plan=final_output,
             message="✅ Trip successfully replanned based on your feedback!"
         )
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Error during replanning: {e}")
-        raise HTTPException(status_code=500, detail=f"Replanning failed: {str(e)}")
+        print(f"❌ Replan error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to replan trip: {str(e)}")
 
+
+@app.post("/api/saved-destinations")
+async def save_destination(
+    request: SaveDestinationRequest,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Save a destination to user's favorites.
+    """
+    try:
+        dest_id = firestore_service.save_destination(
+            user_id=current_user.uid,
+            destination_name=request.destination_name,
+            notes=request.notes
+        )
+        return {"success": True, "destination_id": dest_id, "message": "Destination saved successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save destination: {str(e)}")
 
 
 @app.get("/api/saved-destinations", response_model=List[dict])
@@ -2739,7 +2715,9 @@ async def optimize_day(
         print(f"\n🔄 OPTIMIZE DAY REQUEST from user {current_user.uid}")
         print(f"📍 Location: ({request.current_latitude}, {request.current_longitude})")
         
+        # ====================================================================
         # STEP 1: GET TRIP DETAILS
+        # ====================================================================
         trip = firestore_service.get_trip_plan_by_id(request.trip_id, current_user.uid)
         if not trip:
             raise HTTPException(status_code=404, detail="Trip not found")
@@ -2754,56 +2732,139 @@ async def optimize_day(
                 detail="Trip must be started to use day optimizer. Please start your trip first."
             )
         
+        # ====================================================================
         # STEP 2: GET CURRENT TIME
+        # ====================================================================
         ist = pytz.timezone('Asia/Kolkata')
         current_time = datetime.now(ist)
         current_time_str = current_time.strftime("%I:%M %p")
         current_date_str = current_time.strftime("%A, %B %d, %Y")
         hours_remaining = 24 - current_time.hour
+        
         print(f"⏰ Current time: {current_time_str} ({hours_remaining} hours left in day)")
-
+        
+        # ====================================================================
         # STEP 3: GET REMAINING BUDGET FROM EXPENSE TRACKER
+        # ====================================================================
         expense_service = get_expense_tracker_service(firestore_service.db)
         expense_summary = expense_service.get_expense_tracker(request.trip_id, include_deleted=False)
+        
         remaining_budget = expense_summary.total_remaining
         daily_budget_suggestion = remaining_budget / max(expense_summary.days_remaining, 1)
+        
         print(f"💰 Remaining budget: ₹{remaining_budget:.0f} (Suggested daily: ₹{daily_budget_suggestion:.0f})")
-
+        
+        # ====================================================================
         # STEP 4: GET USER PREFERENCES
+        # ====================================================================
         user_profile = firestore_service.get_user_profile(user_id=current_user.uid)
+        # Handle case where user_profile might be None
         if user_profile and user_profile.get('preferences'):
             profile_interests = user_profile.get('preferences', {}).get('interests', '')
         else:
             profile_interests = ''
+        
         user_interests = trip.get('interests', '') or profile_interests or 'sightseeing, food, culture'
+        
         print(f"🎯 User interests: {user_interests}")
-
+        
+        # ====================================================================
         # STEP 5: BUILD OPTIMIZATION PROMPT
+        # ====================================================================
         location_name = request.current_location_name or f"GPS coordinates {request.current_latitude}, {request.current_longitude}"
         disruption_context = f"\n\n**DISRUPTION REASON:** {request.disruption_reason}" if request.disruption_reason else ""
-        optimization_prompt = f"""You are an expert travel planner. Create an optimized plan for the rest of today.
-Location: {location_name}
-Time: {current_time_str}
-Remaining Budget: ₹{remaining_budget:.0f}
-Interests: {user_interests}{disruption_context}"""
+        
+        optimization_prompt = f"""
+🚨 **URGENT: DYNAMIC ITINERARY OPTIMIZATION NEEDED**
 
+The user's plan has been disrupted and they need immediate help. Create a NEW, OPTIMAL plan for the REST OF TODAY.
+
+**CURRENT SITUATION:**
+- **Date & Time:** {current_date_str}, {current_time_str}
+- **Hours Left Today:** {hours_remaining} hours
+- **Current Location:** {location_name}
+- **GPS Coordinates:** {request.current_latitude}, {request.current_longitude}
+- **City:** {trip.get('destination', 'Unknown')}
+{disruption_context}
+
+**TRIP CONTEXT:**
+- **Original Trip:** {trip.get('num_days', 0)} days to {trip.get('destination')}
+- **Total Budget:** ₹{trip.get('budget', 0):,.0f}
+- **Money Already Spent:** ₹{expense_summary.total_spent:,.0f}
+- **Remaining Budget:** ₹{remaining_budget:,.0f}
+- **Suggested Budget for Today:** ₹{daily_budget_suggestion:,.0f}
+- **User Interests:** {user_interests}
+
+**MISSION:**
+Create an IMMEDIATE, ACTIONABLE plan for the rest of today that:
+
+1. **STARTS NOW** - User is at {location_name}, ready to go
+2. **Uses GPS coordinates** to find NEARBY attractions (within 5-10km radius)
+3. **Respects remaining budget** - Keep today's expenses around ₹{daily_budget_suggestion:.0f}
+4. **Maximizes remaining time** - {hours_remaining} hours to work with
+5. **Matches interests** - Focus on {user_interests}
+6. **Is PRACTICAL** - Include transport, timing, costs
+
+**FORMAT YOUR RESPONSE AS:**
+
+⏰ **OPTIMIZED PLAN FOR TODAY ({current_time_str} onwards)**
+
+**Right Now ({current_time_str}):**
+[What to do immediately from current location]
+
+**Next 2-3 Hours:**
+[Activity 1 with location, cost, transport]
+
+**Afternoon/Evening:**
+[Activity 2 with location, cost, transport]
+
+**Dinner & Evening:**
+[Food recommendations and wind-down activity]
+
+**💰 ESTIMATED COST FOR TODAY:** ₹[X,XXX]
+- Transport: ₹[XXX]
+- Activities: ₹[XXX]
+- Food: ₹[XXX]
+
+**🚗 GETTING STARTED:**
+[Exact instructions: "Take an auto-rickshaw from {location_name} to [next destination], costs ₹XX, 15 min"]
+
+**⚡ QUICK TIPS:**
+- [Time-saving tip]
+- [Budget-saving tip]
+- [Local insider tip]
+
+Use the tools to research nearby attractions, transport options, food spots, and current conditions.
+Make this plan IMMEDIATELY USABLE - the user should be able to start following it right now!
+"""
+        
         print(f"\n🤖 Creating optimized plan with AI agent...")
-
+        
+        # ====================================================================
         # STEP 6: CREATE AI AGENT FOR OPTIMIZATION
+        # ====================================================================
         model = ChatGoogleGenerativeAI(
             model="models/gemini-2.0-flash-exp",
             temperature=0.7,
             google_api_key=os.getenv("GOOGLE_API_KEY")
         )
+        
+        # Create agent with optimization tools (returns executable agent)
         agent_executor = create_react_agent(model, OPTIMIZATION_TOOLS)
+        
+        # Execute agent
         result = agent_executor.invoke({"messages": [("user", optimization_prompt)]})
+        # Extract the last message content
         if result and 'messages' in result:
             optimized_plan = result['messages'][-1].content if result['messages'] else ''
         else:
             optimized_plan = str(result)
+        
         print(f"\n✅ Optimized plan generated ({len(optimized_plan)} characters)")
-
+        
+        # ====================================================================
         # STEP 7: RETURN RESPONSE
+        # ====================================================================
         context_used = {
             "current_time": current_time_str,
             "current_date": current_date_str,
@@ -2815,12 +2876,14 @@ Interests: {user_interests}{disruption_context}"""
             "interests": user_interests,
             "disruption_reason": request.disruption_reason or "Not specified"
         }
+        
         return OptimizeDayResponse(
             success=True,
             message="Day optimized successfully! Here's your new plan.",
             optimized_plan=optimized_plan,
             context_used=context_used
         )
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -2828,6 +2891,340 @@ Interests: {user_interests}{disruption_context}"""
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to optimize day: {str(e)}")
+
+
+@app.get("/api/check-optimization-needed/{trip_id}")
+async def check_optimization_needed(
+    trip_id: str,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Auto-check if day optimization is needed based on:
+    - Time (morning start, after lunch, evening)
+    - Budget alerts (overspending detected)
+    - Location changes (if GPS available)
+    - Trip status (must be started)
+    
+    Returns suggestion to optimize with reason
+    """
+    try:
+        from datetime import datetime
+        import pytz
+        
+        user_id = current_user.uid
+        
+        # Get trip
+        trip = firestore_service.get_trip_plan_by_id(trip_id, user_id)
+        if not trip or trip.get('user_id') != user_id:
+            return {"should_optimize": False, "reason": "Trip not found"}
+        
+        if trip.get('trip_status') != 'started':
+            return {"should_optimize": False, "reason": "Trip not started"}
+        
+        # Get current time
+        ist = pytz.timezone('Asia/Kolkata')
+        current_time = datetime.now(ist)
+        current_hour = current_time.hour
+        
+        # Get expense tracker
+        expense_service = get_expense_tracker_service(firestore_service.db)
+        expense_summary = expense_service.get_expense_tracker(trip_id, include_deleted=False)
+        
+        # Check conditions for auto-optimization
+        reasons = []
+        
+        # 1. Morning optimization (7-9 AM) - Plan the day
+        if 7 <= current_hour <= 9:
+            last_optimization = trip.get('last_optimization_time')
+            if not last_optimization or (datetime.now() - datetime.fromisoformat(last_optimization)).days >= 1:
+                reasons.append("🌅 Good morning! Let's plan your day ahead.")
+        
+        # 2. Budget alert - Overspending detected
+        if expense_summary.total_spent > 0:
+            budget_used_percent = (expense_summary.total_spent / trip.get('budget', 1)) * 100
+            if budget_used_percent > 90:
+                reasons.append(f"💰 Budget alert: {budget_used_percent:.0f}% used. Let's optimize remaining days.")
+            elif expense_summary.total_remaining < 0:
+                reasons.append("🚨 Budget exceeded! Need to adjust your remaining itinerary.")
+        
+        # 3. Mid-day check (12-2 PM) - Afternoon plans
+        if 12 <= current_hour <= 14:
+            reasons.append("☀️ Afternoon plans: Let's optimize the rest of your day.")
+        
+        # 4. Evening planning (5-6 PM) - Dinner and night activities
+        if 17 <= current_hour <= 18:
+            reasons.append("🌆 Evening ahead: Let me suggest dinner spots and night activities.")
+        
+        should_optimize = len(reasons) > 0
+        
+        return {
+            "should_optimize": should_optimize,
+            "reasons": reasons,
+            "trip_id": trip_id,
+            "current_time": current_time.strftime("%I:%M %p"),
+            "remaining_budget": float(expense_summary.total_remaining),
+            "days_remaining": expense_summary.days_remaining
+        }
+        
+    except Exception as e:
+        print(f"❌ Error checking optimization: {str(e)}")
+        return {"should_optimize": False, "reason": "Error checking conditions"}
+
+
+# ============================================================================
+# SAFETY ALERTS ENDPOINTS
+# ============================================================================
+
+@app.get("/api/safety-alerts")
+async def get_safety_alerts(
+    current_user: FirebaseUser = Depends(get_current_user),
+    active_only: bool = True
+):
+    """
+    Get all safety alerts for user's active trips
+    Returns real-time safety alerts (weather, security, health warnings)
+    """
+    try:
+        from datetime import datetime
+        
+        user_id = current_user.uid
+        
+        # Get all user's trips
+        all_trips = firestore_service.get_user_trip_plans(user_id=user_id)
+        
+        # Get alerts for each trip
+        all_alerts = []
+        
+        # Also get destination-based alerts
+        destinations = set()
+        for trip in all_trips:
+            if trip.get('trip_status') == 'started' or not active_only:
+                dest = trip.get('destination', '')
+                if dest:
+                    destinations.add(dest.lower())
+        
+        # Query Firestore for alerts
+        db = firestore_service.db
+        alerts_ref = db.collection('safety_alerts')
+        
+        # Get all alerts and filter
+        alerts_query = alerts_ref.order_by('created_at', direction='DESCENDING').limit(50)
+        alerts_docs = alerts_query.stream()
+        
+        current_time = datetime.utcnow()
+        
+        for doc in alerts_docs:
+            alert_data = doc.to_dict()
+            alert_data['id'] = doc.id
+            
+            # Check if alert is expired
+            expires_at = alert_data.get('expires_at')
+            if expires_at and isinstance(expires_at, str):
+                from datetime import datetime
+                try:
+                    expire_time = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                    if expire_time < current_time:
+                        continue  # Skip expired alerts
+                except:
+                    pass
+            
+            # Filter by location if available
+            alert_location = alert_data.get('location', '').lower()
+            if alert_location:
+                # Check if alert location matches any destination
+                if any(dest in alert_location or alert_location in dest for dest in destinations):
+                    all_alerts.append(alert_data)
+            else:
+                # General alerts (no location specified)
+                all_alerts.append(alert_data)
+        
+        # Sort by severity and time
+        severity_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
+        all_alerts.sort(key=lambda x: (
+            severity_order.get(x.get('severity', 'low'), 4),
+            x.get('created_at', '')
+        ), reverse=True)
+        
+        return {
+            "success": True,
+            "alerts": all_alerts[:20],  # Limit to 20 most relevant
+            "count": len(all_alerts)
+        }
+        
+    except Exception as e:
+        print(f"❌ Error fetching safety alerts: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to fetch alerts: {str(e)}")
+
+
+@app.patch("/api/safety-alerts/{alert_id}/read")
+async def mark_alert_as_read(
+    alert_id: str,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Mark a safety alert as read for the current user
+    """
+    try:
+        db = firestore_service.db
+        alert_ref = db.collection('safety_alerts').document(alert_id)
+        
+        # Update the alert
+        alert_ref.update({
+            'is_read': True,
+            'read_by': firestore_service.firestore.ArrayUnion([current_user.uid]),
+            'read_at': firestore_service.firestore.SERVER_TIMESTAMP
+        })
+        
+        return {
+            "success": True,
+            "message": "Alert marked as read"
+        }
+        
+    except Exception as e:
+        print(f"❌ Error marking alert as read: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to mark alert as read: {str(e)}")
+
+
+@app.post("/api/safety-alerts")
+async def create_safety_alert(
+    alert_data: dict,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Create a new safety alert (admin/system use)
+    Sends notifications to affected users
+    """
+    try:
+        from datetime import datetime
+        
+        # Create alert document
+        db = firestore_service.db
+        alerts_ref = db.collection('safety_alerts')
+        
+        alert_doc = {
+            'severity': alert_data.get('severity', 'medium'),
+            'category': alert_data.get('category', 'advisory'),
+            'title': alert_data.get('title', 'Safety Alert'),
+            'message': alert_data.get('message', ''),
+            'location': alert_data.get('location'),
+            'source': alert_data.get('source', 'Voyage System'),
+            'action_required': alert_data.get('action_required'),
+            'expires_at': alert_data.get('expires_at'),
+            'created_at': datetime.utcnow().isoformat(),
+            'created_by': current_user.uid
+        }
+        
+        # Save to Firestore
+        doc_ref = alerts_ref.add(alert_doc)
+        alert_id = doc_ref[1].id
+        
+        print(f"✅ Safety alert created: {alert_id}")
+        
+        # TODO: Send notifications to affected users
+        # This would integrate with notification_service.py
+        
+        return {
+            "success": True,
+            "alert_id": alert_id,
+            "message": "Safety alert created successfully"
+        }
+        
+    except Exception as e:
+        print(f"❌ Error creating safety alert: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create alert: {str(e)}")
+
+
+@app.get("/api/profile", response_model=dict)
+async def get_profile(
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Get user profile information.
+    """
+    try:
+        profile = firestore_service.get_user_profile(user_id=current_user.uid)
+        
+        if not profile:
+            # Return minimal info indicating no profile exists
+            return {
+                "exists": False,
+                "profileComplete": False,
+                "email": current_user.email,
+                "display_name": current_user.name,
+                "preferences": {}
+            }
+        
+        # Add profileComplete flag
+        profile["exists"] = True
+        profile["profileComplete"] = profile.get("preferences", {}).get("completed", False)
+        
+        return profile
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch profile: {str(e)}")
+
+
+@app.get("/api/profile/status", response_model=dict)
+async def get_profile_status(
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Check user profile status (phone verification, profile completion, etc.)
+    """
+    try:
+        profile = firestore_service.get_user_profile(user_id=current_user.uid)
+        
+        # Check phone verification
+        has_phone = False
+        phone_verified = False
+        
+        if profile:
+            has_phone = bool(profile.get("phone_number"))
+            phone_verified = profile.get("phone_verified", False)
+        
+        # Check profile completion
+        profile_complete = False
+        if profile and profile.get("preferences"):
+            preferences = profile.get("preferences", {})
+            # Profile is complete if it has preferences and completed flag
+            profile_complete = preferences.get("completed", False) or bool(
+                preferences.get("travel_style") or 
+                preferences.get("interests")
+            )
+        
+        return {
+            "has_phone_number": has_phone,
+            "phone_verified": phone_verified,
+            "profile_complete": profile_complete,
+            "profile_exists": profile is not None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch profile status: {str(e)}")
+
+
+@app.put("/api/profile")
+async def update_profile(
+    profile: UserProfile,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Update user profile information.
+    """
+    try:
+        success = firestore_service.create_or_update_user_profile(
+            user_id=current_user.uid,
+            profile_data=profile.model_dump()
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update profile")
+        
+        return {"success": True, "message": "Profile updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
 
 
 # ============================================================================
@@ -2856,8 +3253,10 @@ async def send_otp(
         
         return OTPResponse(
             success=True,
-            message="OTP sent successfully"
+            message="OTP sent successfully",
+            expires_in=300  # 5 minutes
         )
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -2919,6 +3318,7 @@ async def verify_otp(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to verify OTP: {str(e)}")
 
+
 @app.put("/api/preferences")
 async def update_preferences(
     request: UpdatePreferencesRequest,
@@ -2974,6 +3374,7 @@ async def update_preferences(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to update preferences: {str(e)}")
+
 
 @app.post("/api/preferences/learn")
 async def learn_preferences(
@@ -3083,6 +3484,7 @@ async def learn_preferences(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to learn preferences: {str(e)}")
+
 
 @app.get("/api/preferences/questionnaire")
 async def get_preference_questionnaire():
@@ -3205,22 +3607,152 @@ async def get_preference_questionnaire():
         }
     }
 
+
 @app.post("/api/compare-destinations", response_model=DestinationComparisonResponse)
-async def compare_destinations(request: DestinationComparisonRequest):
-    """Compare two destinations and provide data-driven analysis.
-    Example: 'Coorg vs Ooty for a family trip'.
+async def compare_destinations(
+    request: DestinationComparisonRequest,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Compare two destinations and provide data-driven analysis.
+    Example: "Coorg vs Ooty for a family trip"
     """
     try:
         destination_a = request.destination_a
         destination_b = request.destination_b
         context = request.trip_context or "general travel"
-        comparison_prompt = (
-            f"You are an expert travel advisor specializing in Indian destinations.\n"
-            f"A user wants to compare two destinations:\n"
-            f"- **Destination A**: {destination_a}\n"
-            f"- **Destination B**: {destination_b}\n"
-            f"- **Trip Context**: {context}\n"
-        )
+        
+        # Create comparison prompt for Gemini
+        comparison_prompt = f"""You are an expert travel advisor specializing in Indian destinations. 
+        
+A user wants to compare two destinations:
+- **Destination A**: {destination_a}
+- **Destination B**: {destination_b}
+- **Trip Context**: {context}
+
+Your task is to provide a comprehensive, data-driven comparison to help them decide.
+
+**RESEARCH REQUIREMENTS**:
+1. Use get_minimum_daily_budget for BOTH destinations to get real budget data
+2. Use get_travel_advisory for BOTH destinations to check safety, permits, weather
+3. Use find_authentic_local_food for BOTH destinations to discover local cuisine
+4. Research current activities, attractions, and best times to visit
+
+**COMPARISON STRUCTURE** (use this exact format):
+
+## 🏆 Quick Verdict
+[One clear sentence: Which destination wins for this specific trip context and why]
+
+---
+
+## 💰 Budget Comparison
+
+### {destination_a}
+- **Daily Budget Range**: [from research]
+- **Budget Tier**: [Budget-friendly/Moderate/Luxury based on ₹/day]
+- **Cost Highlights**: [Key expenses - accommodation, transport, food, activities]
+
+### {destination_b}
+- **Daily Budget Range**: [from research]
+- **Budget Tier**: [Budget-friendly/Moderate/Luxury based on ₹/day]
+- **Cost Highlights**: [Key expenses - accommodation, transport, food, activities]
+
+**Winner**: [Which is more budget-friendly? By how much?]
+
+---
+
+## 🎯 Best For
+
+### {destination_a}
+[Who is this destination perfect for? Families? Couples? Solo? Adventure seekers?]
+
+### {destination_b}
+[Who is this destination perfect for?]
+
+**Winner**: [Which better matches the trip context: "{context}"?]
+
+---
+
+## 🏞️ Activities & Attractions
+
+### {destination_a}
+- Top 3-5 must-do activities
+- Unique experiences
+
+### {destination_b}
+- Top 3-5 must-do activities
+- Unique experiences
+
+**Winner**: [Which offers better activities for "{context}"?]
+
+---
+
+## 🍽️ Food & Cuisine
+
+### {destination_a}
+- **Signature Dishes**: [from find_authentic_local_food]
+- **Local Food Scene**: [street stalls, hidden gems]
+- **Foodie Rating**: [Rate 1-5 stars]
+
+### {destination_b}
+- **Signature Dishes**: [from find_authentic_local_food]
+- **Local Food Scene**: [street stalls, hidden gems]
+- **Foodie Rating**: [Rate 1-5 stars]
+
+**Winner**: [Which has better authentic food experiences?]
+
+---
+
+## 🌤️ Weather & Best Time
+
+### {destination_a}
+- **Best Months**: [Peak season]
+- **Weather Now**: [Current conditions if researched]
+- **Crowd Level**: [Peak/Moderate/Low]
+
+### {destination_b}
+- **Best Months**: [Peak season]
+- **Weather Now**: [Current conditions if researched]
+- **Crowd Level**: [Peak/Moderate/Low]
+
+**Winner**: [Which is better right now or for planned dates?]
+
+---
+
+## 🛡️ Safety & Accessibility
+
+### {destination_a}
+- **Safety Level**: [from travel advisory]
+- **Permits Needed**: [Yes/No - what permits]
+- **Accessibility**: [How easy to reach - nearest airport/station]
+
+### {destination_b}
+- **Safety Level**: [from travel advisory]
+- **Permits Needed**: [Yes/No - what permits]
+- **Accessibility**: [How easy to reach]
+
+**Winner**: [Which is easier/safer to visit?]
+
+---
+
+## ✅ Final Recommendation
+
+**For "{context}", we recommend: [{destination_a} or {destination_b}]**
+
+**Why**: [2-3 sentences explaining the decisive factors - budget, activities, food, timing, safety, etc. Be specific with data points.]
+
+**Runner-Up Note**: [1 sentence on when the other destination might be better]
+
+---
+
+**CRITICAL RULES**:
+1. You MUST use research tools - no generic advice
+2. Every comparison section MUST have a clear "Winner" 
+3. Use real data (₹ amounts, specific dishes, actual safety info)
+4. Be decisive but fair
+5. Final recommendation must be crystal clear - ONE destination wins
+6. Format output in clean Markdown with emojis as shown above
+"""
 
         # Use Gemini with research tools to generate comparison
         llm = ChatGoogleGenerativeAI(
@@ -3266,429 +3798,408 @@ async def compare_destinations(request: DestinationComparisonRequest):
             comparison_analysis=None
         )
 
+
 @app.get("/api/for-you", response_model=dict)
 async def get_for_you_suggestions(
     current_user: FirebaseUser = Depends(get_current_user),
-    refresh: bool = False
+    refresh: bool = True,  # Changed default to True to always get fresh suggestions
+    _: str = None  # Cache buster parameter
 ):
     """
-    Get personalized 'For You' recommendations with destination events and foods based on user interests.
-    Uses AI to dynamically generate suggestions matching user's specific interests.
-    Returns:
-        1. Destination recommendations matching user preferences
-        2. Upcoming events/festivals based on interests
-        3. Must-try foods based on dietary preferences
+    Get personalized 'For You' destination suggestions based on user's preferences,
+    trip history, and current events/seasons.
+    
+    Parameters:
+    - refresh: If True, regenerate suggestions (default: True for fresh results)
+    - _: Cache buster parameter (ignored, just prevents caching)
+    
+    Returns 4 categories:
+    1. Perfect Match - Ideal destination based on preferences
+    2. Trending Now - Current events/festivals/seasonal attractions
+    3. Hidden Gem - Off-beat discovery matching their style
+    4. Seasonal Special - Perfect for current month/season with time-sensitive appeal
     """
     try:
         user_id = current_user.uid
+        print(f"\n{'='*60}")
+        print(f"🔄 NEW REQUEST: Generating suggestions for user {user_id}")
+        print(f"{'='*60}")
         
-        # Get user preferences
-        user_prefs_data = firestore_service.get_user_preferences(user_id=user_id)
+        # Get user's data
+        user_prefs = firestore_service.get_user_profile(user_id=user_id)
+        all_trips = firestore_service.get_user_trip_plans(user_id=user_id)
         
+        # Get learned preferences from trip history
+        learned_prefs = {}
+        destinations_visited = []
+        saved_destinations = []
+        saved_dest_names = []
+        interests_list = []
+        
+        if all_trips:
+            for trip in all_trips:
+                if trip.get("destination"):
+                    destinations_visited.append(trip.get("destination"))
+                if trip.get("interests"):
+                    interests_list.extend(trip.get("interests") if isinstance(trip.get("interests"), list) else [trip.get("interests")])
+        
+        # Get user preferences for interests
+        if user_prefs and user_prefs.get("preferences"):
+            prefs = user_prefs.get("preferences", {})
+            if prefs.get("interests"):
+                interests_list.extend(prefs.get("interests"))
+        
+        # Remove duplicates
+        interests_list = list(set(interests_list))
+        destinations_visited = list(set(destinations_visited))
+        if all_trips:
+            for trip in all_trips[:3]:
+                if trip.get("interests"):
+                    interests_list.append(trip.get("interests"))
+        
+        total_budget = sum(trip.get("budget", 0) for trip in all_trips) if all_trips else 0
+        avg_budget = (total_budget / len(all_trips)) if all_trips else 50000
+        avg_days = (sum(trip.get("num_days", 0) for trip in all_trips) / len(all_trips)) if all_trips else 5
+        
+        # Use profile budget preference to set realistic baseline
+        if user_prefs and user_prefs.get("preferences", {}).get("budget_preference"):
+            budget_pref = user_prefs["preferences"]["budget_preference"].lower()
+            if budget_pref == "budget" or budget_pref == "low":
+                avg_budget = max(avg_budget, 30000)  # Minimum ₹30k for budget trips
+            elif budget_pref == "moderate" or budget_pref == "medium":
+                avg_budget = max(avg_budget, 50000)  # Minimum ₹50k for moderate
+            elif budget_pref == "luxury" or budget_pref == "high":
+                avg_budget = max(avg_budget, 80000)  # Minimum ₹80k for luxury
+        
+        # Ensure minimum realistic budget per day (₹5000/day minimum)
+        min_trip_budget = avg_days * 5000
+        avg_budget = max(avg_budget, min_trip_budget)
+        
+        # Calculate budget range for suggestions (will be used by AI and validation)
+        budget_lower = int(avg_budget * 0.8)
+        budget_upper = int(avg_budget * 1.4)
+        
+        print(f"💰 Budget range for suggestions: ₹{budget_lower:,} - ₹{budget_upper:,}")
+        
+        # Build preference context
+        preference_context = ""
+        if user_prefs:
+            prefs = user_prefs.get("preferences", {})
+            if prefs.get("interests"):
+                preference_context += f"\n- Saved Interests: {', '.join(prefs['interests'])}"
+            if prefs.get("travel_style"):
+                travel_style = prefs.get("travel_style")
+                if isinstance(travel_style, str):
+                    preference_context += f"\n- Travel Style: {travel_style}"
+                elif isinstance(travel_style, list):
+                    preference_context += f"\n- Travel Style: {', '.join(travel_style)}"
+            if prefs.get("budget_preference"):
+                preference_context += f"\n- Budget: {prefs.get('budget_preference')}"
+            if user_prefs.get("preferred_destinations"):
+                preference_context += f"\n- Loves: {', '.join(user_prefs['preferred_destinations'])}"
+        
+        if learned_prefs:
+            if learned_prefs.get("recurring_interests"):
+                preference_context += f"\n- Proven Loves: {', '.join(learned_prefs['recurring_interests'])} (from history)"
+            if learned_prefs.get("spending_pattern"):
+                preference_context += f"\n- Spending: {learned_prefs['spending_pattern']}"
+        
+        current_month = datetime.now().strftime("%B")
+        current_year = datetime.now().year
+        
+        # Generate suggestions using Tavily for real-time discovery
         suggestions = []
         
-        # Extract user interests and preferences
-        interests = user_prefs_data.get("interests", []) if user_prefs_data else []
-        travel_style = user_prefs_data.get("travelStyle", "adventure").lower() if user_prefs_data else "adventure"
-        food_prefs = user_prefs_data.get("foodPreferences", {}) if user_prefs_data else {}
-        dietary = food_prefs.get("dietary", "non-vegetarian") if isinstance(food_prefs, dict) else "non-vegetarian"
-        budget_tier = user_prefs_data.get("budgetPreference", "moderate") if user_prefs_data else "moderate"
+        # Build search context for Tavily
+        interests_str = ', '.join(interests_list[:3]) if interests_list else 'travel'
+        travel_style = user_prefs.get("preferences", {}).get("travel_style", "adventure") if user_prefs else "adventure"
         
-        # Define curated destinations database (used as fallback)
-        destinations_db = {
-            "adventure": [
-                {
-                    "title": "Ladakh Road Trip",
-                    "description": "High-altitude passes, stunning landscapes, and adventure sports",
-                    "emoji": "🏔️",
-                    "price": 45000,
-                    "location": "Ladakh",
-                    "category": "Adventure",
-                    "image": "https://source.unsplash.com/800x600/?ladakh,mountains",
-                    "events": [
-                        {"name": "Hemis Festival", "date": "July 2025", "description": "Colorful masked dances and Buddhist rituals"},
-                        {"name": "Ladakh Marathon", "date": "September 2025", "description": "World's highest marathon at 11,500 ft"}
-                    ],
-                    "foods": [
-                        {"name": "Thukpa", "description": "Hearty Tibetan noodle soup", "image": "https://source.unsplash.com/400x300/?thukpa,soup"},
-                        {"name": "Momos", "description": "Steamed dumplings with local filling", "image": "https://source.unsplash.com/400x300/?momos,dumplings"}
-                    ]
-                },
-                {
-                    "title": "Rishikesh Adventure",
-                    "description": "White water rafting, bungee jumping, and yoga by the Ganges",
-                    "emoji": "🚣",
-                    "price": 25000,
-                    "location": "Rishikesh",
-                    "category": "Adventure",
-                    "image": "https://source.unsplash.com/800x600/?rishikesh,rafting",
-                    "events": [
-                        {"name": "International Yoga Festival", "date": "March 2026", "description": "Week-long yoga and meditation workshops"},
-                        {"name": "Ganga Aarti", "date": "Daily at sunset", "description": "Spiritual ceremony on river banks"}
-                    ],
-                    "foods": [
-                        {"name": "Chole Bhature", "description": "Spicy chickpeas with fried bread", "image": "https://source.unsplash.com/400x300/?chole-bhature"},
-                        {"name": "Aloo Puri", "description": "Potato curry with puffed bread", "image": "https://source.unsplash.com/400x300/?aloo-puri"}
-                    ]
-                },
-                {
-                    "title": "Spiti Valley Trek",
-                    "description": "Remote trails, ancient monasteries, and raw mountain beauty",
-                    "emoji": "⛰️",
-                    "price": 35000,
-                    "location": "Spiti Valley",
-                    "category": "Adventure",
-                    "image": "https://source.unsplash.com/800x600/?spiti-valley,trek",
-                    "events": [
-                        {"name": "Losar Festival", "date": "February 2026", "description": "Tibetan New Year celebrations"},
-                        {"name": "Spiti Valley Trek Season", "date": "May-October", "description": "Best time for high-altitude trekking"}
-                    ],
-                    "foods": [
-                        {"name": "Thenthuk", "description": "Hand-pulled noodle soup", "image": "https://source.unsplash.com/400x300/?noodle-soup"},
-                        {"name": "Butter Tea", "description": "Traditional Tibetan salted tea", "image": "https://source.unsplash.com/400x300/?tibetan-tea"}
-                    ]
-                }
-            ],
-            "cultural": [
-                {
-                    "title": "Rajasthan Heritage",
-                    "description": "Majestic forts, palaces, and rich cultural heritage",
-                    "emoji": "🏰",
-                    "price": 50000,
-                    "location": "Rajasthan",
-                    "category": "Cultural",
-                    "image": "https://source.unsplash.com/800x600/?rajasthan,palace",
-                    "events": [
-                        {"name": "Pushkar Camel Fair", "date": "November 2025", "description": "Largest camel fair with cultural performances"},
-                        {"name": "Jaipur Literature Festival", "date": "January 2026", "description": "World's largest free literary festival"}
-                    ],
-                    "foods": [
-                        {"name": "Dal Baati Churma", "description": "Traditional Rajasthani delicacy", "image": "https://source.unsplash.com/400x300/?rajasthani-food"},
-                        {"name": "Laal Maas", "description": "Spicy red meat curry", "image": "https://source.unsplash.com/400x300/?indian-curry"}
-                    ]
-                },
-                {
-                    "title": "Varanasi Spiritual Journey",
-                    "description": "Ancient temples, Ganga Aarti, and spiritual awakening",
-                    "emoji": "🕉️",
-                    "price": 28000,
-                    "location": "Varanasi",
-                    "category": "Cultural",
-                    "image": "https://source.unsplash.com/800x600/?varanasi,ganges",
-                    "events": [
-                        {"name": "Dev Deepawali", "date": "November 2025", "description": "Festival of lights on the Ganges"},
-                        {"name": "Mahashivratri", "date": "February 2026", "description": "Grand celebration at Kashi Vishwanath"}
-                    ],
-                    "foods": [
-                        {"name": "Kachori Sabzi", "description": "Crispy kachori with potato curry", "image": "https://source.unsplash.com/400x300/?kachori"},
-                        {"name": "Banarasi Paan", "description": "Traditional betel leaf preparation", "image": "https://source.unsplash.com/400x300/?paan"}
-                    ]
-                },
-                {
-                    "title": "Hampi Archaeological Wonder",
-                    "description": "UNESCO World Heritage ruins and ancient temples",
-                    "emoji": "🏛️",
-                    "price": 32000,
-                    "location": "Hampi",
-                    "category": "Cultural",
-                    "image": "https://source.unsplash.com/800x600/?hampi,ruins",
-                    "events": [
-                        {"name": "Hampi Utsav", "date": "November 2025", "description": "3-day cultural extravaganza with dance and music"},
-                        {"name": "Vijaya Utsav", "date": "December 2025", "description": "Heritage festival celebrating Vijayanagara empire"}
-                    ],
-                    "foods": [
-                        {"name": "Bisi Bele Bath", "description": "Spicy rice and lentil dish", "image": "https://source.unsplash.com/400x300/?south-indian-food"},
-                        {"name": "Masala Dosa", "description": "Crispy rice crepe with potato filling", "image": "https://source.unsplash.com/400x300/?dosa"}
-                    ]
-                }
-            ],
-            "relaxation": [
-                {
-                    "title": "Kerala Backwaters",
-                    "description": "Houseboat cruise, Ayurvedic spa, and serene waterways",
-                    "emoji": "🛶",
-                    "price": 40000,
-                    "location": "Kerala",
-                    "category": "Relaxation",
-                    "image": "https://source.unsplash.com/800x600/?kerala,backwaters",
-                    "events": [
-                        {"name": "Nehru Trophy Boat Race", "date": "August 2026", "description": "Snake boat racing on backwaters"},
-                        {"name": "Onam Festival", "date": "September 2025", "description": "Kerala's biggest harvest festival"}
-                    ],
-                    "foods": [
-                        {"name": "Appam with Stew", "description": "Rice pancakes with coconut milk curry", "image": "https://source.unsplash.com/400x300/?appam"},
-                        {"name": "Kerala Sadya", "description": "Traditional feast on banana leaf", "image": "https://source.unsplash.com/400x300/?kerala-sadya"}
-                    ]
-                },
-                {
-                    "title": "Goa Beach Retreat",
-                    "description": "Peaceful beaches, beach shacks, and coastal relaxation",
-                    "emoji": "🏖️",
-                    "price": 35000,
-                    "location": "Goa",
-                    "category": "Relaxation",
-                    "image": "https://source.unsplash.com/800x600/?goa,beach",
-                    "events": [
-                        {"name": "Sunburn Festival", "date": "December 2025", "description": "Asia's biggest EDM festival"},
-                        {"name": "Goa Carnival", "date": "February 2026", "description": "Colorful parades and street performances"}
-                    ],
-                    "foods": [
-                        {"name": "Fish Curry Rice", "description": "Goan seafood specialty", "image": "https://source.unsplash.com/400x300/?goan-fish-curry"},
-                        {"name": "Bebinca", "description": "Traditional Goan layered dessert", "image": "https://source.unsplash.com/400x300/?bebinca"}
-                    ]
-                },
-                {
-                    "title": "Coorg Coffee Estates",
-                    "description": "Misty hills, coffee plantations, and peaceful nature walks",
-                    "emoji": "☕",
-                    "price": 30000,
-                    "location": "Coorg",
-                    "category": "Relaxation",
-                    "image": "https://source.unsplash.com/800x600/?coorg,coffee",
-                    "events": [
-                        {"name": "Coorg Coffee Festival", "date": "November 2025", "description": "Plantation tours and coffee tasting"},
-                        {"name": "Kaveri Sankramana", "date": "October 2025", "description": "River festival at Talacauvery"}
-                    ],
-                    "foods": [
-                        {"name": "Pandi Curry", "description": "Spicy Coorgi pork curry", "image": "https://source.unsplash.com/400x300/?pork-curry"},
-                        {"name": "Kadambuttu", "description": "Rice dumplings with curry", "image": "https://source.unsplash.com/400x300/?rice-dumplings"}
-                    ]
-                }
-            ],
-            "luxury": [
-                {
-                    "title": "Maldives Luxury Escape",
-                    "description": "Overwater villas, pristine beaches, and world-class resorts",
-                    "emoji": "🏝️",
-                    "price": 150000,
-                    "location": "Maldives",
-                    "category": "Luxury",
-                    "image": "https://source.unsplash.com/800x600/?maldives,resort",
-                    "events": [
-                        {"name": "Maldives Whale Shark Season", "date": "May-November", "description": "Best time for underwater encounters"},
-                        {"name": "Bodu Eid Festival", "date": "June 2026", "description": "Grand celebration across islands"}
-                    ],
-                    "foods": [
-                        {"name": "Mas Huni", "description": "Tuna salad with coconut", "image": "https://source.unsplash.com/400x300/?maldivian-food"},
-                        {"name": "Garudhiya", "description": "Traditional fish soup", "image": "https://source.unsplash.com/400x300/?fish-soup"}
-                    ]
-                },
-                {
-                    "title": "Swiss Alps Experience",
-                    "description": "Premium ski resorts, luxury chalets, and breathtaking views",
-                    "emoji": "⛷️",
-                    "price": 200000,
-                    "location": "Switzerland",
-                    "category": "Luxury",
-                    "image": "https://source.unsplash.com/800x600/?swiss-alps,luxury",
-                    "events": [
-                        {"name": "St. Moritz Gourmet Festival", "date": "January 2026", "description": "World-class chefs and fine dining"},
-                        {"name": "Montreux Jazz Festival", "date": "July 2026", "description": "Legendary music festival"}
-                    ],
-                    "foods": [
-                        {"name": "Fondue", "description": "Traditional melted cheese dish", "image": "https://source.unsplash.com/400x300/?cheese-fondue"},
-                        {"name": "Raclette", "description": "Grilled cheese with potatoes", "image": "https://source.unsplash.com/400x300/?raclette"}
-                    ]
-                },
-                {
-                    "title": "Dubai Extravaganza",
-                    "description": "Luxury shopping, 5-star hotels, and world-class dining",
-                    "emoji": "🏙️",
-                    "price": 120000,
-                    "location": "Dubai",
-                    "category": "Luxury",
-                    "image": "https://source.unsplash.com/800x600/?dubai,luxury",
-                    "events": [
-                        {"name": "Dubai Shopping Festival", "date": "December 2025 - January 2026", "description": "Mega sales and entertainment"},
-                        {"name": "Dubai Food Festival", "date": "February 2026", "description": "Global culinary celebration"}
-                    ],
-                    "foods": [
-                        {"name": "Shawarma", "description": "Middle Eastern wrap", "image": "https://source.unsplash.com/400x300/?shawarma"},
-                        {"name": "Kunafa", "description": "Sweet cheese pastry", "image": "https://source.unsplash.com/400x300/?kunafa"}
-                    ]
-                }
-            ]
-        }
-        
-        # If user has specific interests, use AI to generate personalized recommendations
-        if interests and len(interests) > 0:
-            print(f"🎯 Generating recommendations for interests: {interests}")
+        try:
+            # Use Tavily to search for real destinations
+            from langchain_community.tools.tavily_search import TavilySearchResults
             
-            # Build personalized prompt with current timeframe
-            from datetime import datetime
-            current_month = datetime.now().strftime("%B %Y")
-            next_6_months = (datetime.now() + timedelta(days=180)).strftime("%B %Y")
+            tavily_api_key = os.getenv("TAVILY_API_KEY")
+            if not tavily_api_key:
+                print("⚠️ TAVILY_API_KEY not found, using AI-only suggestions")
+                raise Exception("Tavily not configured")
             
-            interests_str = ", ".join(interests)
-            budget_range = {
-                "budget": "₹20,000 - ₹40,000",
-                "moderate": "₹40,000 - ₹80,000",
-                "luxury": "₹80,000 - ₹200,000"
-            }.get(budget_tier, "₹40,000 - ₹80,000")
+            tavily_search = TavilySearchResults(
+                max_results=5,
+                api_key=tavily_api_key
+            )
             
-            dietary_requirement = f"vegetarian-friendly" if dietary == "vegetarian" else "all cuisines"
+            # Search for trending destinations
+            search_query = f"best {travel_style} destinations in India {current_month} {current_year} festivals events {interests_str}"
+            print(f"🔍 Searching Tavily: {search_query}")
             
-            prompt = f"""Generate 3 personalized Indian travel destination recommendations for a traveler with the following profile:
+            search_results = tavily_search.invoke(search_query)
+            
+            # Extract destination insights from Tavily results
+            tavily_context = "\n".join([
+                f"- {result.get('content', '')[:200]}..." 
+                for result in search_results[:3]
+            ])
+            
+            # Now use AI with Tavily's real-time data
+            suggestion_prompt = f"""You are an expert Indian travel advisor. Create 4 HIGHLY PERSONALIZED "For You" destination suggestions using REAL-TIME information.
 
-Travel Style: {travel_style}
-Interests: {interests_str}
-Budget Range: {budget_range}
-Dietary Preference: {dietary_requirement}
-Current Timeframe: {current_month} (searching for events from {current_month} to {next_6_months})
+**USER PROFILE**:
+- Past Trips: {', '.join(destinations_visited) if destinations_visited else 'First-time traveler'}
+- History: {len(all_trips)} trips  
+- Interests: {', '.join(interests_list) if interests_list else 'General'}
+- Budget: ₹{avg_budget:,.0f} avg
+- Duration: {avg_days:.0f} days avg
+{preference_context}
 
-FOCUS: Recommend destinations ONLY within India. Consider all regions - North, South, East, West, Northeast, and Central India.
+**CURRENT DATE**: {current_month} {current_year}
 
-For each destination, provide:
-1. Title (catchy destination name highlighting the experience)
-2. Location (Indian city/region/state name)
-3. Description (2 sentences about why it matches their interests)
-4. 2 upcoming events/festivals in that location (search for events happening between {current_month} and {next_6_months})
-5. 2 must-try local Indian foods from that region (respecting dietary preferences)
-6. Estimated budget in INR
-7. A relevant emoji
+**REAL-TIME TRAVEL INSIGHTS** (from web search):
+{tavily_context}
 
-Format as JSON array with this exact structure (DO NOT include image URLs - we will generate them):
+**CREATE 4 SUGGESTIONS** (exactly one from each category):
+
+1. **PERFECT MATCH**: The IDEAL next destination based on their proven preferences
+2. **TRENDING NOW**: Current festival/event/destination trending RIGHT NOW (use Tavily data)
+3. **HIDDEN GEM**: Off-beat place matching their style but not mainstream
+4. **SEASONAL SPECIAL**: Perfect for current month/season with time-sensitive appeal
+
+**BUDGET GUIDELINES** (be REALISTIC - assuming 5-day trip):
+- User's budget range: ₹{budget_lower:,} - ₹{budget_upper:,} (calculated from their profile)
+- Island destinations (Andaman, Lakshadweep): **MINIMUM ₹50,000-80,000** (flights ₹15k-25k + hotels ₹8k-15k + food ₹5k-8k)
+- Hill stations (Manali, Shimla, Rishikesh, Coorg): **MINIMUM ₹30,000-50,000** (transport ₹8k-12k + stay ₹7k-10k + activities ₹5k-8k)
+- Metro cities (Delhi, Mumbai, Bangalore): **MINIMUM ₹30,000-60,000** (hotels ₹10k-15k + food ₹6k-10k + local ₹4k-6k)
+- Tier-2 cities (Jaipur, Udaipur, Kochi): **MINIMUM ₹25,000-45,000** (transport ₹6k-10k + stay ₹5k-8k + food ₹4k-6k)
+- Remote areas (Ladakh, Spiti, Northeast): **MINIMUM ₹40,000-70,000** (permits + difficult access + high costs)
+- **CRITICAL**: Use user's calculated range ₹{budget_lower:,} - ₹{budget_upper:,} as baseline
+- **NEVER** quote below ₹25,000 for any destination
+- Adjust for destination type, but stay within or above user's range
+
+**COST BREAKDOWN REALITY CHECK**:
+- Budget accommodation: ₹1,500-2,500/night = ₹7,500-12,500 for 5 nights
+- Mid-range hotels: ₹3,000-5,000/night = ₹15,000-25,000 for 5 nights  
+- Food (3 meals): ₹800-1,500/day = ₹4,000-7,500 for 5 days
+- Local transport: ₹500-1,000/day = ₹2,500-5,000 for 5 days
+- Activities/entry fees: ₹3,000-8,000 total
+- Travel to/from destination: ₹5,000-20,000 depending on distance
+- **TOTAL REALISTIC 5-DAY TRIP: ₹25,000-50,000 MINIMUM**
+
+**REQUIREMENTS**:
+- Use "You/Your" language
+- Reference SPECIFIC user data
+- Use REAL events/festivals from Tavily search results
+- Include TIMELY elements (what's happening NOW or next 1-2 months)
+- Make it PERSONAL and compelling
+- All destinations must be in INDIA
+- **BUDGET MUST BE REALISTIC** - consider flights, hotels, activities, food
+
+JSON format (ONLY valid JSON, no markdown):
 [
   {{
-    "title": "Destination Experience Name",
-    "location": "City/State, India",
-    "description": "Brief description matching interests and highlighting unique aspects",
-    "emoji": "🏔️",
-    "price": 45000,
-    "category": "{travel_style.title()} & {interests_str}",
+    "destination": "Place Name, State",
+    "title": "Personal title using 'You/Your'",
+    "description": "Why this destination matches their interests perfectly",
+    "reason": "Specific reason based on their profile + current events",
+    "estimated_budget": "₹X,XXX - ₹Y,XXX",
+    "best_time": "Current month or next 1-2 months",
+    "category": "perfect_match|trending_now|hidden_gem|seasonal_special",
+    "urgency": "Time-sensitive reason or null",
+    "tags": ["tag1", "tag2", "tag3"],
     "events": [
-      {{"name": "Festival/Event Name", "date": "Month Year", "description": "What makes this event special", "link": "https://official-event-website.com"}},
-      {{"name": "Festival/Event Name 2", "date": "Month Year", "description": "What makes this event special", "link": "https://official-event-website.com"}}
+      {{
+        "name": "Event/Festival name",
+        "date": "Month Year or specific date",
+        "link": "URL to event info (if available) or null"
+      }}
     ],
     "foods": [
-      {{"name": "Local Dish Name", "description": "Brief description of the dish and its significance", "recipeLink": "https://recipe-or-restaurant-link.com"}},
-      {{"name": "Local Dish Name 2", "description": "Brief description of the dish and its significance", "recipeLink": "https://recipe-or-restaurant-link.com"}}
+      {{
+        "name": "Local specialty dish name",
+        "emoji": "🍽️",
+        "recipeLink": "URL to recipe or restaurant info (if available) or null"
+      }}
     ]
   }}
 ]
 
-IMPORTANT RULES:
-- ALL destinations must be in India (different states/regions)
-- Match destinations to these specific interests: {interests_str}
-- Search for REAL Indian festivals and events happening between {current_month} and {next_6_months}
-- Include specific dates (e.g., "December 2025", "March 2026") for events
-- Provide clickable links for events (official websites, tourism sites, or event pages)
-- Provide clickable recipe/restaurant links for foods (recipe websites or popular restaurants)
-- Suggest authentic local Indian cuisine from each region
-- Respect dietary preference: {dietary_requirement}
-- Stay within budget range: {budget_range}
-- Make recommendations diverse across different parts of India
-- Highlight unique cultural, natural, or adventure experiences
-- Consider offbeat and popular destinations based on interests
-- Prioritize destinations with upcoming events in the specified timeframe
-- DO NOT include image URLs in your response"""
+**IMPORTANT**: 
+- Include at least 1-2 events (festivals, concerts, exhibitions happening NOW or soon)
+- Include at least 2-3 local food specialties
+- Use Tavily search results to find REAL current events
+- Events should be time-relevant (happening in next 1-3 months)
 
-            try:
-                # Use Gemini to generate personalized recommendations
-                llm = ChatGoogleGenerativeAI(
-                    model="gemini-2.0-flash-exp",
-                    temperature=0.7,
-                    google_api_key=google_api_key,
-                )
-                
-                response = llm.invoke(prompt)
-                ai_response = response.content
-                
-                # Extract JSON from response
-                import json
-                import re
-                
-                # Try to find JSON array in response
-                json_match = re.search(r'\[.*\]', ai_response, re.DOTALL)
-                if json_match:
-                    recommendations_data = json.loads(json_match.group())
-                    
-                    # Build suggestions from AI response
-                    for idx, rec in enumerate(recommendations_data[:3]):
-                        # Process events with clickable links
-                        events_with_links = []
-                        for event in rec.get("events", [])[:2]:
-                            events_with_links.append({
-                                "name": event.get("name", ""),
-                                "date": event.get("date", ""),
-                                "description": event.get("description", ""),
-                                "link": event.get("link", "")
-                            })
-                        
-                        # Process foods with recipe links (no images)
-                        foods_list = []
-                        food_emojis = ["🍛", "🥘", "🍜", "🍲", "🥗", "🍝", "🥙", "🌮", "🍕", "🍱"]
-                        for idx_food, food in enumerate(rec.get("foods", [])[:2]):
-                            foods_list.append({
-                                "name": food.get("name", ""),
-                                "description": food.get("description", ""),
-                                "recipeLink": food.get("recipeLink", ""),
-                                "emoji": food_emojis[idx_food % len(food_emojis)]
-                            })
-                        
-                        suggestions.append({
-                            "title": rec.get("title", f"Destination {idx+1}"),
-                            "description": rec.get("description", ""),
-                            "emoji": rec.get("emoji", "✈️"),
-                            "price": rec.get("price", 50000),
-                            "location": rec.get("location", ""),
-                            "category": rec.get("category", f"{travel_style.title()}"),
-                            "rating": 4.7,
-                            "events": events_with_links,
-                            "foods": foods_list
-                        })
-                    
-                    print(f"✅ Generated {len(suggestions)} AI-powered recommendations")
-                
-            except Exception as e:
-                print(f"⚠️ AI generation failed: {e}, falling back to curated suggestions")
-                suggestions = []  # Will fall through to fallback
-        
-        # Fallback: Use curated destinations if AI fails or no interests
-        if len(suggestions) == 0:
-            print(f"📚 Using curated destinations for travel style: {travel_style}")
+Return ONLY the JSON array, no other text.
+"""
             
-            # Get recommendations based on travel style
-            style_destinations = destinations_db.get(travel_style, destinations_db["adventure"])
-        
-            # Build suggestions with events and foods
-            for dest in style_destinations[:3]:
-                # Filter foods based on dietary preferences
-                filtered_foods = dest["foods"]
-                if dietary == "vegetarian":
-                    # Filter out non-veg items (simple keyword check)
-                    filtered_foods = [f for f in dest["foods"] if not any(word in f["name"].lower() for word in ["meat", "fish", "pork", "chicken", "tuna", "seafood"])]
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-2.0-flash-exp",
+                temperature=0.9,  # Higher temperature for more variation
+                google_api_key=os.getenv("GOOGLE_API_KEY")
+            )
             
-                suggestions.append({
-                    "title": dest["title"],
-                    "description": dest["description"],
-                    "emoji": dest["emoji"],
-                    "price": dest["price"],
-                    "location": dest["location"],
-                    "category": dest["category"],
-                    "rating": 4.7,
-                    "image": dest["image"],
-                    "events": dest["events"][:2],  # Top 2 events
-                    "foods": filtered_foods[:2] if len(filtered_foods) >= 2 else filtered_foods  # Top 2 foods
-                })
+            print(f"🎯 Generating AI-powered 'For You' suggestions with Tavily data")
+            print(f"📊 User budget baseline: ₹{avg_budget:,.0f} for {avg_days:.0f} days")
+            response = llm.invoke(suggestion_prompt)
+            suggestions_text = response.content.strip()
+            
+            import json
+            import re
+            
+            # Clean up markdown formatting
+            if "```json" in suggestions_text:
+                suggestions_text = suggestions_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in suggestions_text:
+                suggestions_text = suggestions_text.split("```")[1].split("```")[0].strip()
+            
+            # Parse JSON
+            suggestions_data = json.loads(suggestions_text)
+            suggestions = suggestions_data[:4]
+            
+            # Validate and fix unrealistic budgets
+            for suggestion in suggestions:
+                if 'estimated_budget' in suggestion:
+                    # Remove .0 from decimals and ensure proper comma formatting
+                    budget_str = str(suggestion['estimated_budget'])
+                    budget_str = re.sub(r'(\d),(\d{3})\.0', r'\1,\2', budget_str)
+                    budget_str = re.sub(r'(\d)\.0', r'\1', budget_str)
+                    
+                    # Extract numbers from budget string (remove ₹ and commas)
+                    numbers = re.findall(r'[\d,]+', budget_str.replace('₹', ''))
+                    if len(numbers) >= 2:
+                        try:
+                            lower = int(numbers[0].replace(',', ''))
+                            upper = int(numbers[1].replace(',', ''))
+                            
+                            # ABSOLUTE MINIMUM ENFORCEMENT
+                            absolute_minimum = 25000  # No trip under 25k
+                            
+                            # Validate based on destination type with STRICT minimums
+                            destination = suggestion.get('destination', '').lower()
+                            min_budget = 30000  # Default minimum raised to 30k
+                            
+                            # Island destinations need higher budget
+                            if any(x in destination for x in ['andaman', 'lakshadweep', 'island']):
+                                min_budget = 55000
+                            # Remote/adventure destinations
+                            elif any(x in destination for x in ['ladakh', 'spiti', 'kashmir', 'arunachal', 'sikkim']):
+                                min_budget = 45000
+                            # Major metros and popular tourist spots
+                            elif any(x in destination for x in ['mumbai', 'delhi', 'bangalore', 'goa', 'rishikesh', 'manali', 'shimla', 'mussoorie', 'nainital']):
+                                min_budget = 32000
+                            # Hill stations
+                            elif any(x in destination for x in ['darjeeling', 'ooty', 'kodaikanal', 'coorg', 'munnar']):
+                                min_budget = 28000
+                            
+                            # FORCE OVERRIDE if budget is too low
+                            if upper < absolute_minimum:
+                                # Budget is completely unrealistic, use defaults
+                                lower = budget_lower
+                                upper = budget_upper
+                                print(f"🚨 CRITICAL: Budget too low for {destination} - forcing to ₹{lower:,} - ₹{upper:,}")
+                            elif upper < min_budget:
+                                # Below minimum for destination type
+                                lower = min_budget
+                                upper = int(min_budget * 1.5)
+                                print(f"⚠️ Adjusted {destination}: was ₹{numbers[1]}, now ₹{upper:,}")
+                            elif lower < min_budget * 0.75:
+                                # Lower bound too low
+                                lower = int(min_budget * 0.85)
+                                upper = max(upper, int(min_budget * 1.4))
+                                print(f"⚠️ Raised lower bound for {destination}: ₹{lower:,} - ₹{upper:,}")
+                            
+                            suggestion['estimated_budget'] = f"₹{lower:,} - ₹{upper:,}"
+                        except Exception as ex:
+                            print(f"⚠️ Budget parsing error: {ex}, using calculated range")
+                            suggestion['estimated_budget'] = f"₹{budget_lower:,} - ₹{budget_upper:,}"
+                    else:
+                        # If can't parse, use calculated range
+                        print(f"⚠️ Could not parse budget, using ₹{budget_lower:,} - ₹{budget_upper:,}")
+                        suggestion['estimated_budget'] = f"₹{budget_lower:,} - ₹{budget_upper:,}"
+            
+            print(f"✅ Generated {len(suggestions)} personalized suggestions with Tavily data")
+            
+            # Add image URLs to each suggestion
+            for suggestion in suggestions:
+                suggestion['image_url'] = generate_destination_image_url(suggestion['destination'])
+            
+        except Exception as e:
+            print(f"⚠️ Tavily/AI generation failed: {e}, using fallback")
+            # Fallback suggestions
+            suggestions = [
+                {
+                    "destination": "Coorg, Karnataka",
+                    "title": "Your Perfect Nature Escape",
+                    "description": "Coffee plantations and misty hills await",
+                    "reason": f"Matches your ₹{avg_budget:,.0f} budget and love for nature",
+                    "estimated_budget": f"₹{int(avg_budget * 0.8):,} - ₹{int(avg_budget * 1.2):,}",
+                    "best_time": f"{current_month} is ideal",
+                    "category": "perfect_match",
+                    "urgency": None,
+                    "tags": ["nature", "relaxation", "coffee"],
+                    "image_url": generate_destination_image_url("Coorg"),
+                    "events": [
+                        {"name": "Coffee Blossom Festival", "date": "November 2025", "link": None},
+                        {"name": "Coorg Adventure Festival", "date": "December 2025", "link": None}
+                    ],
+                    "foods": [
+                        {"name": "Pandi Curry (Pork Curry)", "emoji": "🍛", "recipeLink": None},
+                        {"name": "Kadambuttu (Rice Dumplings)", "emoji": "🍚", "recipeLink": None},
+                        {"name": "Bamboo Shoot Curry", "emoji": "🥘", "recipeLink": None}
+                    ]
+                }
+            ]
         
-        # Determine message based on how recommendations were generated
-        if interests and len(interests) > 0 and len(suggestions) > 0:
-            # Check if suggestions came from AI (first batch before fallback)
-            message = f"AI-generated destinations matching your interests: {', '.join(interests)}"
-        elif user_prefs_data:
-            message = f"Curated destinations for {travel_style} travelers"
-        else:
-            message = "Discover amazing destinations with local events and cuisine"
+        # If no suggestions, provide default
+        if not suggestions:
+            suggestions = [
+                {
+                    "destination": "Kerala",
+                    "title": "Start Your Journey Here",
+                    "description": "God's Own Country welcomes you",
+                    "reason": "Perfect for first-time travelers",
+                    "estimated_budget": "₹40,000 - ₹70,000",
+                    "best_time": f"{current_month} - Great weather",
+                    "category": "perfect_match",
+                    "urgency": None,
+                    "tags": ["nature", "backwaters", "culture"],
+                    "image_url": generate_destination_image_url("Kerala"),
+                    "events": [
+                        {"name": "Nehru Trophy Boat Race", "date": "November 2025", "link": None},
+                        {"name": "International Film Festival", "date": "December 2025", "link": None}
+                    ],
+                    "foods": [
+                        {"name": "Appam with Stew", "emoji": "🥞", "recipeLink": None},
+                        {"name": "Kerala Sadya", "emoji": "🍛", "recipeLink": None},
+                        {"name": "Puttu and Kadala", "emoji": "🍚", "recipeLink": None}
+                    ]
+                }
+            ]
+        
+        # Print final budgets for debugging
+        print(f"\n📊 FINAL SUGGESTIONS:")
+        for i, sug in enumerate(suggestions, 1):
+            print(f"   {i}. {sug.get('destination')}: {sug.get('estimated_budget')}")
+        print(f"{'='*60}\n")
         
         return {
-            "recommendations": suggestions[:3],  # Changed from suggestions to recommendations for frontend compatibility
-            "message": message,
+            "success": True,
+            "message": "For You suggestions generated",
+            "suggestions": suggestions,
+            "personalization_score": min(100, (len(all_trips) * 10) + (20 if user_prefs else 0) + (20 if learned_prefs else 0)),
+            "user_context": {
+                "trips_count": len(all_trips),
+                "has_preferences": bool(user_prefs),
+                "has_learned_patterns": bool(learned_prefs),
+                "saved_destinations_count": len(saved_destinations)
+            },
+            "generated_at": datetime.now().isoformat()  # Add timestamp to break cache
         }
         
     except Exception as e:
-        print(f"❌ Error in for-you: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch suggestions: {str(e)}")
+        print(f"❌ For You error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate suggestions: {str(e)}")
+
 
 # ============================================================================
 # TRENDING SUGGESTIONS ENDPOINT (PUBLIC, NO AUTH REQUIRED)
@@ -3697,88 +4208,20 @@ IMPORTANT RULES:
 @app.get("/api/trending", response_model=TrendingSuggestionsResponse)
 async def get_trending_suggestions():
     """
-    Get trending destinations and upcoming events for all users (AI-generated).
+    Get trending destinations and upcoming events for all users.
     """
     try:
-        # Check cache first
+        # Fast-safe fallback implementation for trending suggestions to avoid heavy LLM calls
         cached = trending_cache.get_cache()
         if cached:
             print("📦 Returning cached trending data")
             return cached
 
-        # Calculate timeframe (current month + 6 months for events)
-        current_month = datetime.now().strftime("%B %Y")
-        next_6_months = (datetime.now() + timedelta(days=180)).strftime("%B %Y")
-        
-        # AI prompt for trending Indian destinations
-        prompt = f"""Generate 4 trending Indian travel destinations for {current_month}. These should be the MOST POPULAR and SEASONALLY RELEVANT destinations right now.
-
-Current Timeframe: {current_month} (find events happening between {current_month} and {next_6_months})
-
-For each destination, provide:
-1. Title (catchy name highlighting what's trending)
-2. Location (City/State, India)
-3. Description (why it's trending now - 2 sentences)
-4. Trending reason (specific seasonal/event reason - 1 sentence)
-5. Estimated budget in INR (range format: "₹X - ₹Y per person")
-6. Best time to visit (months)
-7. Trending score (80-99)
-8. Tags (4 relevant keywords: season, activity type, etc.)
-
-Format as JSON array:
-[
-  {{
-    "destination": "Destination Name",
-    "title": "Catchy Title",
-    "description": "Why it's amazing right now",
-    "trending_reason": "Specific seasonal/event reason",
-    "estimated_budget": "₹40,000 - ₹80,000 per person",
-    "best_time": "November to March",
-    "trending_score": 95,
-    "tags": ["winter", "adventure", "mountains", "festivals"]
-  }}
-]
-
-FOCUS: Only Indian destinations. Match them to the current season and upcoming events/festivals between {current_month} and {next_6_months}."""
-
-        # Use Gemini AI
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
-            temperature=0.7,
-            google_api_key=google_api_key,
-        )
-        
-        response = llm.invoke(prompt)
-        ai_response = response.content
-        
-        # Extract JSON from response
-        import json
-        import re
-        json_match = re.search(r'\[.*\]', ai_response, re.DOTALL)
-        
-        trending_destinations = []
-        if json_match:
-            ai_data = json.loads(json_match.group())
-            for dest in ai_data[:4]:  # Max 4 trending destinations
-                trending_destinations.append(
-                    TrendingDestination(
-                        destination=dest.get("destination", "India"),
-                        title=dest.get("title", ""),
-                        description=dest.get("description", ""),
-                        trending_reason=dest.get("trending_reason", ""),
-                        estimated_budget=dest.get("estimated_budget", "₹40,000 - ₹80,000"),
-                        best_time=dest.get("best_time", "All year"),
-                        trending_score=dest.get("trending_score", 85),
-                        tags=dest.get("tags", []),
-                        image_url=None
-                    )
-                )
-        
         now = datetime.now()
         response_data = TrendingSuggestionsResponse(
             success=True,
-            message=f"AI-generated trending destinations for {current_month}",
-            trending_destinations=trending_destinations,
+            message="Trending suggestions (fallback)",
+            trending_destinations=[],
             upcoming_events=[],
             cache_timestamp=now,
             valid_until=now + timedelta(hours=trending_cache.cache_duration_hours)
@@ -3786,50 +4229,10 @@ FOCUS: Only Indian destinations. Match them to the current season and upcoming e
 
         trending_cache.set_cache(response_data)
         return response_data
-        
     except Exception as e:
-        import random
-        print(f"❌ Trending generation error: {e}")
+        print(f"❌ Trending generation error (fallback): {e}")
         raise HTTPException(status_code=500, detail=str(e))
-        
-        # Build suggestions with events and foods
-        for dest in style_destinations[:3]:
-            # Filter foods based on dietary preferences
-            filtered_foods = dest["foods"]
-            if dietary == "vegetarian":
-                # Filter out non-veg items (simple keyword check)
-                filtered_foods = [f for f in dest["foods"] if not any(word in f["name"].lower() for word in ["meat", "fish", "pork", "chicken", "tuna", "seafood"])]
-            
-            suggestions.append({
-                "title": dest["title"],
-                "description": dest["description"],
-                "emoji": dest["emoji"],
-                "price": dest["price"],
-                "location": dest["location"],
-                "category": dest["category"],
-                "rating": 4.7,
-                "image": dest["image"],
-                "events": dest["events"][:2],  # Top 2 events
-                "foods": filtered_foods[:2] if len(filtered_foods) >= 2 else filtered_foods  # Top 2 foods
-            })
-        
-        # Determine message based on how recommendations were generated
-        if interests and len(interests) > 0 and len(suggestions) > 0:
-            # Check if suggestions came from AI (first batch before fallback)
-            message = f"AI-generated destinations matching your interests: {', '.join(interests)}"
-        elif user_prefs_data:
-            message = f"Curated destinations for {travel_style} travelers"
-        else:
-            message = "Discover amazing destinations with local events and cuisine"
-        
-        return {
-            "suggestions": suggestions[:3],  # Ensure max 3 suggestions
-            "message": message,
-        }
-        
-    except Exception as e:
-        print(f"❌ Error in for-you: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch suggestions: {str(e)}")
+
 
 # Endpoint to clear trending cache (for testing/debugging)
 @app.post("/api/trending/clear-cache")
@@ -3842,6 +4245,7 @@ async def clear_trending_cache():
         "success": True,
         "message": "Trending cache cleared. Next request will generate fresh data."
     }
+
 
 # ============================================================================
 # HOME PAGE DATA ENDPOINT (PUBLIC)
@@ -4011,6 +4415,7 @@ async def get_home_data():
     except Exception as e:
         print(f"❌ Home data error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # ============================================================================
 # DASHBOARD SUGGESTIONS ENDPOINT (AUTHENTICATED)
@@ -4304,6 +4709,7 @@ async def get_dashboard_suggestions(
         print(f"❌ Dashboard suggestions error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ============================================================================
 # HEALTH CHECK ENDPOINT
 # ============================================================================
@@ -4321,6 +4727,7 @@ async def root():
             "trip_history": True
         }
     }
+
 
 @app.get("/health")
 async def health():
@@ -4350,6 +4757,7 @@ async def health():
             ]
         }
     }
+
 
 # ============================================================================
 # VOYAGE VERIFIED REVIEWS ENDPOINTS
@@ -4460,6 +4868,7 @@ async def create_review(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/api/reviews", response_model=ReviewsResponse)
 async def get_user_reviews(
     current_user: FirebaseUser = Depends(get_current_user)
@@ -4510,6 +4919,7 @@ async def get_user_reviews(
         print(f"❌ Error fetching reviews: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/api/reviews/{review_id}", response_model=VoyageVerifiedReview)
 async def get_review(
     review_id: str,
@@ -4531,6 +4941,7 @@ async def get_review(
     except Exception as e:
         print(f"❌ Error fetching review: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # ============================================================================
 # TASTE GRAPH ENDPOINTS
@@ -4619,6 +5030,7 @@ async def get_taste_graph(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/taste-graph/rebuild")
 async def rebuild_taste_graph(
     current_user: FirebaseUser = Depends(get_current_user)
@@ -4660,6 +5072,7 @@ async def rebuild_taste_graph(
     except Exception as e:
         print(f"❌ Error rebuilding taste graph: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # ============================================================================
 # Feature 18: Direct Booking Links
@@ -4889,6 +5302,7 @@ async def generate_booking_links(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/api/booking-links/{trip_id}", response_model=BookingLinksResponse)
 async def get_booking_links_by_trip_id(
     trip_id: str,
@@ -4909,6 +5323,7 @@ async def get_booking_links_by_trip_id(
     )
     
     return await generate_booking_links(request, current_user)
+
 
 # ============================================================================
 # Feature 20: Voyage Board (Collaborative Planning)
@@ -4983,39 +5398,6 @@ async def create_voyage_board(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/voyage-board/trip/{trip_id}", response_model=VoyageBoardResponse)
-async def get_voyage_board_by_trip(
-    trip_id: str,
-    current_user: FirebaseUser = Depends(get_current_user)
-):
-    """
-    Get a Voyage Board by trip ID.
-    Returns the board if it exists for this trip, otherwise 404.
-    """
-    try:
-        board_service = get_voyage_board_service(firestore_service)
-        board = board_service.get_board_by_trip_id(trip_id)
-        
-        if not board:
-            raise HTTPException(status_code=404, detail="No board found for this trip")
-        
-        # Check if user has access (must be owner or member)
-        is_member = any(m.user_id == current_user.uid for m in board.members)
-        
-        if not is_member:
-            raise HTTPException(status_code=403, detail="Access denied to this board")
-        
-        return {
-            "success": True,
-            "message": "Board retrieved successfully",
-            "board": board
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error retrieving board by trip: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/voyage-board/{board_id}", response_model=VoyageBoardResponse)
 async def get_voyage_board(
@@ -5070,6 +5452,7 @@ async def get_voyage_board(
         print(f"❌ Error retrieving board: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/voyage-board/{board_id}/join", response_model=VoyageBoardResponse)
 async def join_voyage_board(
     board_id: str,
@@ -5111,6 +5494,7 @@ async def join_voyage_board(
     except Exception as e:
         print(f"❌ Error joining board: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/voyage-board/{board_id}/comment", response_model=VoyageBoardResponse)
 async def add_comment_to_board(
@@ -5162,6 +5546,52 @@ async def add_comment_to_board(
     except Exception as e:
         print(f"❌ Error adding comment: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/voyage-board/{board_id}/comment/like", response_model=VoyageBoardResponse)
+async def like_comment_on_board(
+    board_id: str,
+    request: LikeCommentRequest,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Like/unlike a comment on a Voyage Board.
+    """
+    try:
+        board_service = get_voyage_board_service(firestore_service)
+        
+        # Get board
+        board = board_service.get_board(board_id)
+        
+        if not board:
+            raise HTTPException(status_code=404, detail="Board not found")
+        
+        # Check if user is a member
+        if not any(m.user_id == current_user.uid for m in board.members):
+            raise HTTPException(status_code=403, detail="You must be a member to like comments")
+        
+        # Toggle like
+        board = board_service.like_comment(
+            board_id=board_id,
+            comment_id=request.comment_id,
+            user_id=current_user.uid
+        )
+        
+        if not board:
+            raise HTTPException(status_code=400, detail="Could not like comment")
+        
+        return VoyageBoardResponse(
+            success=True,
+            message="Comment liked successfully",
+            board=board
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error liking comment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/voyage-board/{board_id}/suggestion", response_model=VoyageBoardResponse)
 async def add_suggestion_to_board(
@@ -5220,6 +5650,7 @@ async def add_suggestion_to_board(
         print(f"❌ Error adding suggestion: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/voyage-board/{board_id}/vote", response_model=VoyageBoardResponse)
 async def vote_on_suggestion(
     board_id: str,
@@ -5262,6 +5693,7 @@ async def vote_on_suggestion(
     except Exception as e:
         print(f"❌ Error voting: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/voyage-board/{board_id}/resolve", response_model=VoyageBoardResponse)
 async def resolve_suggestion(
@@ -5314,6 +5746,7 @@ async def resolve_suggestion(
         print(f"❌ Error resolving suggestion: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/api/my-boards", response_model=dict)
 async def get_my_boards(
     current_user: FirebaseUser = Depends(get_current_user)
@@ -5344,6 +5777,7 @@ async def get_my_boards(
     except Exception as e:
         print(f"❌ Error retrieving boards: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/voyage-board/{board_id}/poll", response_model=VoyageBoardResponse)
 async def create_poll(
@@ -5395,6 +5829,7 @@ async def create_poll(
         print(f"❌ Error creating poll: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/voyage-board/{board_id}/poll/vote", response_model=VoyageBoardResponse)
 async def vote_on_poll(
     board_id: str,
@@ -5421,7 +5856,7 @@ async def vote_on_poll(
         board = board_service.vote_on_poll(
             board_id=board_id,
             poll_id=request.poll_id,
-            option_id=request.option_id,
+            option_index=request.option_index,
             user_id=current_user.uid
         )
         
@@ -5440,10 +5875,12 @@ async def vote_on_poll(
         print(f"❌ Error voting on poll: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ============================================================================
 # GOOGLE CALENDAR EXPORT ENDPOINTS (Feature 21)
 # ============================================================================
 
+@app.post("/api/calendar/export", response_model=GoogleCalendarExportResponse)
 @app.post("/api/export-to-calendar", response_model=GoogleCalendarExportResponse)
 async def export_trip_to_calendar(
     request: GoogleCalendarExportRequest,
@@ -5469,10 +5906,17 @@ async def export_trip_to_calendar(
         trip_start_date = None
         if hasattr(request, 'trip_start_date') and request.trip_start_date:
             trip_start_date = request.trip_start_date
+        elif hasattr(request, 'start_date') and request.start_date:
+            # Handle alternative start_date format from frontend
+            trip_start_date = datetime.fromisoformat(request.start_date.replace('Z', '+00:00'))
         elif 'trip_start_date' in trip_data:
             trip_start_date = trip_data['trip_start_date']
             if isinstance(trip_start_date, str):
-                trip_start_date = datetime.fromisoformat(trip_start_date)
+                trip_start_date = datetime.fromisoformat(trip_start_date.replace('Z', '+00:00'))
+        elif 'start_date' in trip_data:
+            trip_start_date = trip_data['start_date']
+            if isinstance(trip_start_date, str):
+                trip_start_date = datetime.fromisoformat(trip_start_date.replace('Z', '+00:00'))
         else:
             # Default to tomorrow if no date provided
             trip_start_date = datetime.now() + timedelta(days=1)
@@ -5519,6 +5963,7 @@ async def export_trip_to_calendar(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/download-calendar/{trip_id}.ics")
 async def download_calendar_ics(
@@ -5578,6 +6023,7 @@ async def download_calendar_ics(
     except Exception as e:
         print(f"❌ Error downloading calendar: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/trip/{trip_id}/calendar-preview", response_model=dict)
 async def preview_calendar_export(
@@ -5657,6 +6103,7 @@ async def preview_calendar_export(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/trip/{trip_id}/download-ics")
 async def download_ics_file(
     trip_id: str,
@@ -5725,6 +6172,7 @@ async def download_ics_file(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ============================================================================
 # GOOGLE CALENDAR IMPORT & SMART SCHEDULING ENDPOINTS (Feature 22)
 # ============================================================================
@@ -5768,6 +6216,7 @@ async def find_free_weekends(
             status_code=500 if "401" not in str(e) else 401,
             detail=str(e)
         )
+
 
 @app.post("/api/calendar/smart-schedule", response_model=SmartScheduleResponse)
 async def smart_schedule_trip(
@@ -5831,6 +6280,7 @@ async def smart_schedule_trip(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/api/calendar/daily-schedule", response_model=dict)
 async def get_daily_schedule(
     access_token: str,
@@ -5873,6 +6323,7 @@ async def get_daily_schedule(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/calendar/check-conflicts", response_model=dict)
 async def check_calendar_conflicts(
@@ -5939,6 +6390,7 @@ async def check_calendar_conflicts(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ============================================================================
 # FEATURE 23: ON-TRIP EXPENSE TRACKER
 # Live expense tracking during trips with budget management
@@ -6003,6 +6455,7 @@ async def add_expense(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.put("/api/expenses/update", response_model=Expense)
 async def update_expense(
     request: UpdateExpenseRequest,
@@ -6060,6 +6513,7 @@ async def update_expense(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.delete("/api/expenses/{expense_id}")
 async def delete_expense(
     expense_id: str,
@@ -6098,6 +6552,7 @@ async def delete_expense(
     except Exception as e:
         print(f"❌ Error deleting expense: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/expenses/tracker/{trip_id}", response_model=ExpenseTrackerSummary)
 async def get_expense_tracker(
@@ -6146,6 +6601,17 @@ async def get_expense_tracker(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Alias endpoint for frontend compatibility
+@app.get("/api/expense-tracker/{trip_id}", response_model=ExpenseTrackerSummary)
+async def get_expense_tracker_alias(
+    trip_id: str,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """Alias for /api/expenses/tracker/{trip_id} - for frontend compatibility"""
+    return await get_expense_tracker(trip_id, current_user)
+
 
 @app.post("/api/expenses/replan-trip/{trip_id}")
 async def replan_trip_with_budget(
@@ -6313,14 +6779,6 @@ Now generate the revised budget-friendly itinerary:
 
         print(f"🤖 Calling AI agent for replanning...")
         
-        # Create LLM and agent for replanning
-        llm = ChatGoogleGenerativeAI(
-            model="models/gemini-2.5-flash",
-            temperature=0.7,
-            google_api_key=os.getenv("GOOGLE_API_KEY")
-        )
-        agent = create_react_agent(llm, PLANNING_TOOLS)
-        
         # Create a simple state with just the prompt
         replan_state = {
             "messages": [HumanMessage(content=replan_prompt)],
@@ -6335,7 +6793,7 @@ Now generate the revised budget-friendly itinerary:
         }
         
         # Invoke the agent
-        result = agent.invoke(replan_state)
+        result = await agent.ainvoke(replan_state)
         
         # Extract the AI response
         revised_itinerary = ""
@@ -6380,6 +6838,7 @@ Now generate the revised budget-friendly itinerary:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/expenses/analytics", response_model=ExpenseAnalyticsResponse)
 async def get_expense_analytics(
     request: ExpenseAnalyticsRequest,
@@ -6421,6 +6880,7 @@ async def get_expense_analytics(
     except Exception as e:
         print(f"❌ Error getting expense analytics: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/expenses/split")
 async def split_expense(
@@ -6465,6 +6925,7 @@ async def split_expense(
         print(f"❌ Error splitting expense: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/expenses/adjust-budget")
 async def adjust_budget(
     request: BudgetAdjustmentRequest,
@@ -6505,6 +6966,7 @@ async def adjust_budget(
     except Exception as e:
         print(f"❌ Error adjusting budget: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # ============================================================================
 # USER DASHBOARD
@@ -6569,6 +7031,7 @@ async def get_user_dashboard(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/api/dashboard/trip/{trip_id}", response_model=TripSummaryCard)
 async def get_trip_summary(
     trip_id: str,
@@ -6618,521 +7081,6 @@ async def get_trip_summary(
         print(f"❌ Error getting trip summary: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ============================================================================
-# VOYAGE BOARD ENDPOINTS
-# ============================================================================
-
-@app.post("/api/voyage-boards")
-async def create_voyage_board(
-    request: CreateVoyageBoardRequest,
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Create a new Voyage Board for collaborative trip planning"""
-    try:
-        voyage_board_service = get_voyage_board_service(firestore_service.db)
-        
-        board = voyage_board_service.create_board(
-            trip_id=request.trip_id,
-            owner_id=user.uid,
-            owner_email=user.email,
-            owner_name=user.name,
-            board_name=request.board_name,
-            description=request.description,
-            is_public=request.is_public if hasattr(request, 'is_public') else False,
-            access_code=request.access_code if hasattr(request, 'access_code') else None
-        )
-        
-        return {
-            "success": True,
-            "message": "Voyage Board created successfully",
-            "board_id": board.board_id,
-            "share_link": board.share_link,
-            "access_code": board.access_code
-        }
-    except Exception as e:
-        print(f"❌ Error creating voyage board: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/voyage-boards/{board_id}")
-async def get_voyage_board(
-    board_id: str,
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Get voyage board details"""
-    try:
-        voyage_board_service = get_voyage_board_service(firestore_service.db)
-        board = voyage_board_service.get_board(board_id)
-        
-        if not board:
-            raise HTTPException(status_code=404, detail="Board not found")
-        
-        return board.model_dump(mode='json')
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error getting voyage board: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/voyage-board/comment")
-async def add_comment(
-    request: AddCommentRequest,
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Add a comment to a voyage board"""
-    try:
-        voyage_board_service = get_voyage_board_service(firestore_service.db)
-        
-        comment = voyage_board_service.add_comment(
-            board_id=request.board_id,
-            user_id=user.uid,
-            user_name=user.name,
-            content=request.content,
-            day_number=request.day_number if hasattr(request, 'day_number') else None,
-            activity_index=request.activity_index if hasattr(request, 'activity_index') else None,
-            reply_to=request.reply_to if hasattr(request, 'reply_to') else None
-        )
-        
-        if not comment:
-            raise HTTPException(status_code=400, detail="Failed to add comment")
-        
-        return {"success": True, "message": "Comment added", "comment_id": comment.comment_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error adding comment: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/voyage-board/suggestion")
-async def add_suggestion(
-    request: AddSuggestionRequest,
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Add a suggestion to a voyage board"""
-    try:
-        voyage_board_service = get_voyage_board_service(firestore_service.db)
-        
-        suggestion = voyage_board_service.add_suggestion(
-            board_id=request.board_id,
-            user_id=user.uid,
-            user_name=user.name,
-            suggestion_type=request.suggestion_type,
-            suggested_value=request.suggested_value,
-            day_number=request.day_number if hasattr(request, 'day_number') else None,
-            activity_index=request.activity_index if hasattr(request, 'activity_index') else None,
-            current_value=request.current_value if hasattr(request, 'current_value') else None,
-            reason=request.reason if hasattr(request, 'reason') else None
-        )
-        
-        if not suggestion:
-            raise HTTPException(status_code=400, detail="Failed to add suggestion")
-        
-        return {"success": True, "message": "Suggestion added", "suggestion_id": suggestion.suggestion_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error adding suggestion: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/voyage-board/vote")
-async def vote_on_suggestion(
-    request: VoteOnSuggestionRequest,
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Vote on a suggestion"""
-    try:
-        voyage_board_service = get_voyage_board_service(firestore_service.db)
-        
-        success = voyage_board_service.vote_on_suggestion(
-            board_id=request.board_id,
-            suggestion_id=request.suggestion_id,
-            user_id=user.uid,
-            vote=request.vote
-        )
-        
-        if not success:
-            raise HTTPException(status_code=400, detail="Failed to record vote")
-        
-        return {"success": True, "message": "Vote recorded"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error voting: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/voyage-board/like-comment")
-async def like_comment(
-    board_id: str = Body(...),
-    comment_id: str = Body(...),
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Like/unlike a comment"""
-    try:
-        voyage_board_service = get_voyage_board_service(firestore_service.db)
-        board = voyage_board_service.get_board(board_id)
-        
-        if not board:
-            raise HTTPException(status_code=404, detail="Board not found")
-        
-        # Toggle like
-        comment_found = False
-        for comment in board.comments:
-            if comment.comment_id == comment_id:
-                comment_found = True
-                if user.uid in comment.likes:
-                    comment.likes.remove(user.uid)
-                else:
-                    comment.likes.append(user.uid)
-                break
-        
-        if not comment_found:
-            raise HTTPException(status_code=404, detail="Comment not found")
-        
-        voyage_board_service.update_board(board)
-        
-        return {"success": True, "message": "Like toggled"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error liking comment: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================================
-# EXPENSE TRACKER ENDPOINTS
-# ============================================================================
-
-@app.get("/api/trips/{trip_id}/expenses")
-async def get_trip_expenses(
-    trip_id: str,
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Get expense summary for a trip - reads transactions array from trips document"""
-    try:
-        # Get trip document (which contains transactions array)
-        trip_ref = firestore_service.db.collection('trips').document(trip_id)
-        trip_doc = trip_ref.get()
-        
-        if not trip_doc.exists:
-            raise HTTPException(status_code=404, detail="Trip not found")
-        
-        trip_data = trip_doc.to_dict()
-        budget = trip_data.get('budget', 0)
-        per_day_budget = trip_data.get('per_day_budget', 0)
-        transactions = trip_data.get('transactions', [])
-        
-        # Calculate totals
-        total_spent = sum(t.get('amount', 0) for t in transactions)
-        total_remaining = budget - total_spent
-        percentage_used = (total_spent / budget * 100) if budget > 0 else 0
-        
-        # Calculate daily spending
-        today = datetime.now().date()
-        today_spending = sum(
-            t.get('amount', 0) for t in transactions 
-            if t.get('date', '').startswith(str(today))
-        )
-        
-        # Budget status
-        budget_status = "on-track"
-        if total_spent > budget:
-            budget_status = "over-budget"
-        elif percentage_used >= 90:
-            budget_status = "critical"
-        elif percentage_used >= 75:
-            budget_status = "warning"
-        
-        # Calculate category breakdown
-        category_totals = {}
-        for t in transactions:
-            cat = t.get('category', 'Other')
-            category_totals[cat] = category_totals.get(cat, 0) + t.get('amount', 0)
-        
-        categories = [
-            {
-                "name": cat,
-                "spent_amount": amount,
-                "percentage": (amount / total_spent * 100) if total_spent > 0 else 0
-            }
-            for cat, amount in category_totals.items()
-        ]
-        
-        # Generate warnings
-        warnings = []
-        if total_spent > budget:
-            warnings.append(f"🔴 BUDGET EXCEEDED! You've spent ₹{total_spent - budget:,.2f} over budget.")
-        elif percentage_used >= 90:
-            warnings.append(f"⚠️ CRITICAL: You've used {percentage_used:.1f}% of your budget!")
-        elif percentage_used >= 75:
-            warnings.append(f"⚠️ WARNING: {percentage_used:.1f}% of budget used.")
-        
-        if today_spending > per_day_budget:
-            warnings.append(f"📊 Today's spending (₹{today_spending:,.2f}) exceeds daily budget (₹{per_day_budget:,.2f})")
-        
-        return {
-            "trip_id": trip_id,
-            "total_budget": budget,
-            "per_day_budget": per_day_budget,
-            "total_spent": total_spent,
-            "total_remaining": total_remaining,
-            "percentage_used": round(percentage_used, 2),
-            "budget_status": budget_status,
-            "today_spending": today_spending,
-            "categories": categories,
-            "expenses": transactions,
-            "warnings": warnings,
-            "recommendations": [
-                "Track expenses daily to stay on budget" if not warnings else 
-                "Consider optimizing remaining activities to reduce costs"
-            ]
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error getting expenses: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/trips/{trip_id}/expenses")
-async def add_expense(
-    trip_id: str,
-    request: AddExpenseRequest,
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Add a new expense - saves as transaction in trips document"""
-    try:
-        # Get trip document
-        trip_ref = firestore_service.db.collection('trips').document(trip_id)
-        trip_doc = trip_ref.get()
-        
-        if not trip_doc.exists:
-            raise HTTPException(status_code=404, detail="Trip not found")
-        
-        # Create transaction object
-        transaction = {
-            "id": f"txn_{datetime.now().timestamp()}_{secrets.token_hex(4)}",
-            "category": request.category,
-            "amount": request.amount,
-            "description": request.description,
-            "date": request.date or datetime.now().isoformat(),
-            "user_id": user.uid,
-            "split_among": request.split_among,
-            "created_at": datetime.now().isoformat()
-        }
-        
-        # Add to transactions array
-        trip_ref.update({
-            "transactions": firestore.ArrayUnion([transaction])
-        })
-        
-        print(f"✅ Transaction added to trip {trip_id}: ₹{request.amount} - {request.description}")
-        
-        return {
-            "success": True,
-            "expense_id": transaction["id"],
-            "message": "Expense added to trip"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error adding expense: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.delete("/api/trips/{trip_id}/expenses/{expense_id}")
-async def delete_expense(
-    trip_id: str,
-    expense_id: str,
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Delete an expense - removes transaction from trips document"""
-    try:
-        # Get trip document
-        trip_ref = firestore_service.db.collection('trips').document(trip_id)
-        trip_doc = trip_ref.get()
-        
-        if not trip_doc.exists:
-            raise HTTPException(status_code=404, detail="Trip not found")
-        
-        trip_data = trip_doc.to_dict()
-        transactions = trip_data.get('transactions', [])
-        
-        # Find and remove the transaction
-        transaction_to_remove = None
-        for t in transactions:
-            if t.get('id') == expense_id:
-                transaction_to_remove = t
-                break
-        
-        if not transaction_to_remove:
-            raise HTTPException(status_code=404, detail="Transaction not found")
-        
-        # Remove from array
-        trip_ref.update({
-            "transactions": firestore.ArrayRemove([transaction_to_remove])
-        })
-        
-        print(f"✅ Transaction deleted from trip {trip_id}: {expense_id}")
-        
-        return {"success": True, "message": "Expense deleted"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error deleting expense: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/optimize-itinerary")
-async def optimize_itinerary(
-    trip_id: str = Body(...),
-    new_budget: float = Body(...),
-    reason: str = Body(...),
-    constraints: dict = Body({}),
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Optimize itinerary based on new budget constraints"""
-    try:
-        # Get the trip
-        trip_ref = firestore_service.db.collection('trips').document(trip_id)
-        trip_doc = trip_ref.get()
-        
-        if not trip_doc.exists:
-            raise HTTPException(status_code=404, detail="Trip not found")
-        
-        trip = trip_doc.to_dict()
-
-        # Use AI to optimize the itinerary
-        prompt = f"""
-You are an expert travel planner. A traveler needs help optimizing their trip itinerary.
-
-Current Trip: {trip.get('destination', 'Unknown')}
-Current Itinerary:
-{trip.get('itinerary', trip.get('plan', 'No itinerary found'))}
-
-Reason for optimization: {reason}
-New budget constraint: ${new_budget}
-Additional constraints: {constraints}
-
-Please provide an optimized itinerary that:
-1. Stays within the ${new_budget} budget
-2. Addresses the reason: {reason}
-3. Maintains the trip's character and key experiences
-4. Suggests cost-effective alternatives where needed
-
-Format your response with clear day-by-day breakdown and bullet points for activities.
-"""
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-pro",
-            temperature=0.7,
-            google_api_key=GOOGLE_API_KEY
-        )
-        
-        response = llm.invoke(prompt)
-        optimized_itinerary = response.content
-        
-        # Update the trip with optimized itinerary
-        trip_ref.update({
-            'itinerary': optimized_itinerary,
-            'plan': optimized_itinerary,
-            'budget': new_budget,
-            'last_optimized': datetime.now().isoformat()
-        })
-        
-        return {
-            "success": True,
-            "message": "Itinerary optimized successfully",
-            "optimized_itinerary": optimized_itinerary
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error optimizing itinerary: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================================
-# CALENDAR EXPORT ENDPOINT
-# ============================================================================
-
-@app.post("/api/calendar/export")
-async def export_to_calendar(
-    trip_id: str = Body(...),
-    destination: str = Body(...),
-    start_date: str = Body(...),
-    end_date: Optional[str] = Body(None),
-    itinerary: str = Body(...),
-    user: FirebaseUser = Depends(get_current_user)
-):
-    """Export trip itinerary to Google Calendar"""
-    try:
-        calendar_service = get_calendar_export_service(firestore_service.db)
-        
-        result = calendar_service.export_trip_to_calendar(
-            user_id=user.uid,
-            trip_id=trip_id,
-            destination=destination,
-            start_date=start_date,
-            end_date=end_date,
-            itinerary=itinerary
-        )
-        
-        return {
-            "success": True,
-            "message": "Trip exported to calendar successfully",
-            "calendar_url": result.get('calendar_url'),
-            "events_created": result.get('events_created', 0)
-        }
-        
-    except Exception as e:
-        print(f"❌ Error exporting to calendar: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================================
-# EXISTING ENDPOINTS
-# ============================================================================
-        
-        # Create optimization prompt
-        prompt = f"""The user has a budget constraint. Their original budget was ₹{trip.get('budget', 0)}, 
-but they now only have ₹{new_budget} remaining.
-
-Reason: {reason}
-
-Current itinerary:
-{trip.get('itinerary', 'No itinerary found')}
-
-Please replan the remaining days of the trip to fit within the new budget of ₹{new_budget}.
-Constraints:
-- Keep accommodation: {constraints.get('keep_accommodation', True)}
-- Keep transport: {constraints.get('keep_transport', True)}
-- Optimize: {constraints.get('optimize', 'activities_and_food')}
-
-Provide a revised itinerary that stays within budget."""
-        
-        # Use the AI to generate optimized itinerary
-        # (This would normally call your trip planning agent)
-        
-        return {
-            "success": True,
-            "message": "Itinerary optimization in progress",
-            "new_budget": new_budget
-        }
-    except Exception as e:
-        print(f"❌ Error optimizing itinerary: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
 # EXISTING ENDPOINTS (health check)
@@ -7154,5 +7102,8 @@ async def startup_event():
     print(f"✅ SERVER READY")
     print(f"{'='*60}\n")
 
+
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+

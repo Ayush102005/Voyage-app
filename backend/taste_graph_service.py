@@ -15,6 +15,14 @@ from schemas import (
 
 
 class TasteGraphBuilder:
+    pass
+
+
+# Alias for backward compatibility
+TasteGraphService = TasteGraphBuilder
+
+
+class TasteGraphService:
     """
     Builds and updates user taste graphs from review data
     """
