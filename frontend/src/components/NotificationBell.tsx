@@ -33,7 +33,8 @@ const NotificationBell: React.FC = () => {
     const fetchAlerts = async () => {
       try {
         const token = await user.getIdToken()
-        const response = await fetch('http://localhost:8000/api/safety-alerts', {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+        const response = await fetch(`${apiUrl}/api/safety-alerts`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -103,7 +104,8 @@ const NotificationBell: React.FC = () => {
       const token = await user?.getIdToken()
       if (!token) return
 
-      await fetch(`http://localhost:8000/api/safety-alerts/${notificationId}/read`, {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      await fetch(`${apiUrl}/api/safety-alerts/${notificationId}/read`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -131,11 +133,12 @@ const NotificationBell: React.FC = () => {
       const token = await user?.getIdToken()
       if (!token) return
 
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
       const unreadNotifs = notifications.filter(n => !n.is_read)
       
       await Promise.all(
         unreadNotifs.map(n => 
-          fetch(`http://localhost:8000/api/safety-alerts/${n.id}/read`, {
+          fetch(`${apiUrl}/api/safety-alerts/${n.id}/read`, {
             method: 'PATCH',
             headers: {
               'Authorization': `Bearer ${token}`,

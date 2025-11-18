@@ -148,10 +148,11 @@ const DashboardPage = () => {
     try {
       const firebaseUser = auth.currentUser
       const token = firebaseUser ? await firebaseUser.getIdToken() : ''
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
       
       // Add cache buster to force fresh data
       const cacheBuster = new Date().getTime()
-      const response = await fetch(`http://localhost:8000/api/for-you?refresh=true&_=${cacheBuster}`, {
+      const response = await fetch(`${apiUrl}/api/for-you?refresh=true&_=${cacheBuster}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -173,8 +174,9 @@ const DashboardPage = () => {
     try {
       const firebaseUser = auth.currentUser
       const token = firebaseUser ? await firebaseUser.getIdToken() : ''
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
       
-      const response = await fetch('http://localhost:8000/api/trip-plans', {
+      const response = await fetch(`${apiUrl}/api/trip-plans`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -208,7 +210,8 @@ const DashboardPage = () => {
         const firebaseUser = auth.currentUser
         const token = firebaseUser ? await firebaseUser.getIdToken() : ''
         
-        const response = await fetch(`http://localhost:8000/api/check-optimization-needed/${currentTripId}`, {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+        const response = await fetch(`${apiUrl}/api/check-optimization-needed/${currentTripId}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -290,7 +293,8 @@ const DashboardPage = () => {
       if (start_date) payload.start_date = start_date
       if (end_date) payload.end_date = end_date
 
-      const response = await fetch('http://localhost:8000/api/plan-trip-from-prompt', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/plan-trip-from-prompt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -467,7 +471,8 @@ const DashboardPage = () => {
       const destinationMatch = firstLine.match(/to (.+?)(?:\s|$|,)/i)
       const destination = destinationMatch ? destinationMatch[1] : 'Trip Plan'
       
-      const response = await fetch('http://localhost:8000/api/trip-plans', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/trip-plans`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1210,7 +1215,8 @@ const DashboardPage = () => {
                                 toast.loading('Generating calendar file...')
                                 
                                 // Create calendar event and download ICS file
-                                const response = await fetch('http://localhost:8000/api/calendar/export', {
+                                const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+                                const response = await fetch(`${apiUrl}/api/calendar/export`, {
                                   method: 'POST',
                                   headers: {
                                     'Content-Type': 'application/json',
@@ -1227,7 +1233,7 @@ const DashboardPage = () => {
                                 
                                 if (response.ok) {
                                   // Fetch the ICS file as blob
-                                  const downloadResponse = await fetch(`http://localhost:8000/api/download-calendar/${trip.id}.ics`, {
+                                  const downloadResponse = await fetch(`${apiUrl}/api/download-calendar/${trip.id}.ics`, {
                                     headers: {
                                       'Authorization': `Bearer ${token}`
                                     }
@@ -1272,7 +1278,8 @@ const DashboardPage = () => {
                                 const firebaseUser = auth.currentUser
                                 const token = firebaseUser ? await firebaseUser.getIdToken() : ''
                                 
-                                const response = await fetch(`http://localhost:8000/api/trip-plans/${trip.id}`, {
+                                const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+                                const response = await fetch(`${apiUrl}/api/trip-plans/${trip.id}`, {
                                   method: 'DELETE',
                                   headers: {
                                     'Authorization': `Bearer ${token}`

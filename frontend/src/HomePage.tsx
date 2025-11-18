@@ -7,7 +7,8 @@ const HomePage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-  fetch('http://localhost:8000/api/trending')
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  fetch(`${apiUrl}/api/trending`)
       .then((res) => res.json())
       .then((data) => {
         if (data && Array.isArray(data.trending_destinations)) {
