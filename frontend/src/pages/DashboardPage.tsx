@@ -27,7 +27,6 @@ const DashboardPage = () => {
   const [currentTripId, setCurrentTripId] = useState<string | null>(null)
   const [viewingSavedTrip, setViewingSavedTrip] = useState(false)
   const [currentTripTitle, setCurrentTripTitle] = useState('')
-  const [userPrompt, setUserPrompt] = useState<string>('')
   // Chat history to show conversation flow
   const [chatHistory, setChatHistory] = useState<Array<{role: 'user' | 'assistant', content: string}>>([])  
   // AI Edit Trip state
@@ -274,8 +273,6 @@ const DashboardPage = () => {
     setViewingSavedTrip(false)
     setCurrentTripTitle('')
     
-    // Save the user's prompt to display
-    setUserPrompt(prompt)
     // Add user message to chat history
     setChatHistory(prev => [...prev, { role: 'user', content: prompt }])
     
@@ -404,7 +401,6 @@ const DashboardPage = () => {
     setViewingSavedTrip(false)
     setCurrentTripTitle('')
     setCurrentTripId(null)
-    setUserPrompt('')
     setChatHistory([]) // Clear chat history for new conversation
     toast.success('Started new chat')
   }
@@ -1024,7 +1020,6 @@ const DashboardPage = () => {
                               setPreviousExtraction(null)
                               setInput('')
                               setSelectedDay(null) // Reset day filter
-                              setUserPrompt('') // Clear user message when viewing saved trip
                               
                               // Get the itinerary and filter out any generation messages
                               let planToDisplay = trip.itinerary || ''

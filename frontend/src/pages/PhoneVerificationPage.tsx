@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { useAuthStore } from '../store/authStore'
 import { auth } from '../lib/firebase'
 
 const PhoneVerificationPage = () => {
   const navigate = useNavigate()
-  const { user } = useAuthStore()
   const [phoneNumber, setPhoneNumber] = useState('')
   const [showOtpModal, setShowOtpModal] = useState(false)
   const [otp, setOtp] = useState('')

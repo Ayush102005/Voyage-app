@@ -5,6 +5,7 @@ Firebase configuration and initialization
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,6 +22,20 @@ def initialize_firebase():
         print("[OK] Firebase already initialized")
     except ValueError:
         # Firebase not initialized, so initialize it
+        
+        # Try to load from environment variable first (for production/Render)
+        creds_json = os.getenv("FIREBASE_CREDENTIALS")
+        if creds_json:
+            try:
+                creds_dict = json.loads(creds_json)
+                cred = credentials.Certificate(creds_dict)
+                firebase_admin.initialize_app(cred)
+                print("[OK] Firebase initialized from environment variable")
+                return True
+            except Exception as e:
+                print(f"[ERROR] Error parsing Firebase credentials from env: {e}")
+        
+        # Fall back to credentials file (for local development)
         env_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
         if env_path and os.path.exists(env_path):
             cred_path = env_path
@@ -29,7 +44,7 @@ def initialize_firebase():
 
         if not os.path.exists(cred_path):
             print(f"[ERROR] Firebase credentials file not found at: {cred_path}")
-            print("Download your service account JSON from Firebase Console and place it in the backend folder as 'firebase-credentials.json'.")
+            print("Set FIREBASE_CREDENTIALS environment variable or place firebase-credentials.json in backend folder.")
             raise RuntimeError("Firebase credentials missing. Backend cannot start.")
 
         try:

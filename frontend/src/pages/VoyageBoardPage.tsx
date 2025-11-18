@@ -301,16 +301,6 @@ const VoyageBoardPage = () => {
     setNewPoll({ ...newPoll, options: updated })
   }
 
-  const handleAddSuggestion = async () => {
-    // Keep old function for backwards compatibility
-    return
-  }
-
-  const handleVote = async (suggestionId: string, vote: 'up' | 'down') => {
-    // Keep old function for backwards compatibility
-    return
-  }
-
   const handleLikeComment = async (commentId: string) => {
     const firebaseUser = auth.currentUser
     if (!firebaseUser) {
