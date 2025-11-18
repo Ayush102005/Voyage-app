@@ -338,9 +338,9 @@ const DashboardPage = () => {
   }
 
   const handleSendMessage = async () => {
-    // Send prompt to backend - it will ask for missing info including dates
     if (!input.trim()) return
     
+    // Send directly - let backend AI ask for missing information conversationally
     await sendPrompt(input, undefined, undefined)
   }
 
@@ -380,20 +380,39 @@ const DashboardPage = () => {
   }
 
   const confirmDatesAndSend = async () => {
+    // Validate both dates are provided
+    if (!startDate || !endDate) {
+      toast.error('Both start and end dates are required')
+      return
+    }
+    
     // Accept flexible input
     const parsedStart = parseDateInput(startDate)
     const parsedEnd = parseDateInput(endDate)
+    
     if (!parsedStart || !parsedEnd) {
-      toast.error('Please enter valid dates (e.g., 15 nov, 15/11, or 2025-11-15)')
+      toast.error('Please enter valid dates')
       return
     }
+    
+    // Check if dates are in the past
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (new Date(parsedStart) < today) {
+      toast.error('Start date cannot be in the past')
+      return
+    }
+    
     if (new Date(parsedStart) > new Date(parsedEnd)) {
       toast.error('Start date must be before end date')
       return
     }
+    
     const promptToSend = pendingPrompt || input
     setShowDateModal(false)
     setPendingPrompt(null)
+    setStartDate('')
+    setEndDate('')
     await sendPrompt(promptToSend, parsedStart, parsedEnd)
     setStartDate('')
     setEndDate('')
@@ -1363,37 +1382,65 @@ const DashboardPage = () => {
         )}
         {/* Date modal for planning */}
         {showDateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setShowDateModal(false)} />
-            <div className="relative bg-neutral-900 border border-neutral-800 rounded-lg p-6 w-full max-w-md z-10">
-              <h3 className="text-lg font-bold mb-3">When are you traveling?</h3>
-              <p className="text-sm text-neutral-400 mb-4">Please pick start and end dates for your trip so I can build a date-aware itinerary.</p>
-              <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => { setShowDateModal(false); setPendingPrompt(null); }} />
+            <div className="relative bg-neutral-900 border-2 border-teal-600/50 rounded-xl p-6 w-full max-w-md z-10 shadow-2xl">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-3xl">📅</span>
+                <h3 className="text-xl font-bold">Travel Dates Required</h3>
+              </div>
+              <p className="text-sm text-neutral-300 mb-6 leading-relaxed">
+                To create a personalized itinerary with accurate availability and pricing, please provide your travel dates.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div>
-                  <label className="text-xs text-neutral-400">Start date</label>
+                  <label className="text-sm font-semibold text-neutral-200 mb-2 block">Start Date *</label>
                   <input
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white"
+                    min={new Date().toISOString().split('T')[0]}
+                    required
+                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:border-teal-500 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-neutral-400">End date</label>
+                  <label className="text-sm font-semibold text-neutral-200 mb-2 block">End Date *</label>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white"
+                    min={startDate || new Date().toISOString().split('T')[0]}
+                    required
+                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:border-teal-500 focus:outline-none"
                   />
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
-                <button onClick={() => { setShowDateModal(false); setPendingPrompt(null); }} className="px-4 py-2 text-sm text-neutral-300 hover:text-white">
+              {startDate && endDate && new Date(startDate) <= new Date(endDate) && (
+                <div className="bg-teal-900/20 border border-teal-600/30 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-teal-400">
+                    ✓ Trip duration: {Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} days
+                  </p>
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+                <button 
+                  onClick={() => { 
+                    setShowDateModal(false); 
+                    setPendingPrompt(null); 
+                    setStartDate('');
+                    setEndDate('');
+                  }} 
+                  className="px-5 py-2.5 text-sm text-neutral-300 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors order-2 sm:order-1"
+                >
                   Cancel
                 </button>
-                <button onClick={confirmDatesAndSend} className="px-4 py-2 bg-teal-600 hover:bg-teal-700 rounded-lg text-sm text-white">
-                  Confirm & Plan
+                <button 
+                  onClick={confirmDatesAndSend} 
+                  disabled={!startDate || !endDate}
+                  className="btn-primary px-6 py-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed order-1 sm:order-2"
+                >
+                  Create Itinerary →
                 </button>
               </div>
             </div>
