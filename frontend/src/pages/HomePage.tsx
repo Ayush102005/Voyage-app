@@ -82,8 +82,7 @@ const HomePage = () => {
               by AI
             </h1>
             <p className="text-xl md:text-2xl text-neutral-400 mb-8">
-              Let our AI orchestrator craft the perfect Indian getaway—tailored to your budget, 
-              interests, and dreams. No hassle, just adventure.
+              Plan your perfect trip in minutes. AI does the work, you enjoy the adventure.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button onClick={() => setShowAuthModal(true)} className="btn-primary text-lg px-8 py-4">
