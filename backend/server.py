@@ -917,19 +917,6 @@ For every meal, use your food finder to recommend:
 📋 TRIP OVERVIEW
 [Write a compelling 2-3 sentence overview of what makes this trip special]
 
-**📸 DESTINATION GALLERY:**
-![{trip_details.destination} Landmark](https://source.unsplash.com/1600x900/?{trip_details.destination.lower()},landmark)
-![{trip_details.destination} Culture](https://source.unsplash.com/1600x900/?{trip_details.destination.lower()},culture)
-*Add 2-3 stunning images that capture the essence of the destination*
-
-**VISUAL EXPERIENCE - DESTINATION IMAGES:**
-Add 2-3 stunning destination images using Unsplash URLs to make the plan visually appealing:
-• Format: ![Alt Text](https://source.unsplash.com/1600x900/?destination-name,landmark)
-• Example: ![Delhi India Gate](https://source.unsplash.com/1600x900/?delhi,india-gate)
-• Example: ![Goa Beach](https://source.unsplash.com/1600x900/?goa,beach)
-• Use relevant keywords: destination name + main attraction/theme
-• Place images right after TRIP OVERVIEW section
-
 🚨 LINKING FORMAT REMINDER - EVERY LINK MUST LOOK LIKE THIS:
 **📱 [Link Text](actual-working-url)**
 Example: **📱 [Book Flight](https://www.makemytrip.com/flight/search?itinerary=DEL-BLR-15/12/2025&tripType=O&paxType=A-2_C-0_I-0&intl=false&cabinClass=E&lang=eng)**
@@ -981,11 +968,6 @@ OR
 📅 DAY-BY-DAY PLAN
 
 Day 1: Arrival & [Descriptive Title]
-
-**📸 Day Highlights:**
-![Day 1 Attraction](https://source.unsplash.com/1600x900/?destination,main-attraction)
-*Add 1-2 images per day showing the main attractions/activities using Unsplash format*
-*Example: ![Red Fort Delhi](https://source.unsplash.com/1600x900/?red-fort,delhi)*
 
 ✈️ Arrival:
 • Land at {trip_details.destination} Airport/Station [Estimated time]
@@ -1888,7 +1870,7 @@ Be smart and conversational in understanding:
   → origin: "Mumbai", destination: "Goa", days: 5, people: 1, budget: 0, start_date: "2025-12-20", interests: None
 
 - "I want to visit Kerala for a week with my wife next week, we love beaches and food"
-    → origin: "Not specified", destination: "Kerala", days: 7, people: 2, budget: 0, start_date: "{next_week_date}", interests: "beaches, food"
+    → origin: "Not specified", destination: "Kerala", days: 7, people: 2, budget: 0, start_date: "next week", interests: "beaches, food"
 
 **HINDI LANGUAGE UNDERSTANDING:**
 - "mujhe delhi ghumne jana hai mumbai se 5 din ke liye budget 60000 hai aur 2 log hai agla mahina"

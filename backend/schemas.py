@@ -1044,7 +1044,7 @@ class GoogleCalendarExportRequest(BaseModel):
     destination: Optional[str] = Field(default=None, description="Trip destination")
     start_date: Optional[str] = Field(default=None, description="Trip start date (alternative format)")
     end_date: Optional[str] = Field(default=None, description="Trip end date")
-    itinerary: Optional[dict] = Field(default=None, description="Trip itinerary data")
+    itinerary: Optional[Union[dict, str]] = Field(default=None, description="Trip itinerary data (dict or markdown string)")
 
 
 class GoogleCalendarExportResponse(BaseModel):
