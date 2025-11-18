@@ -90,7 +90,8 @@ from schemas import (
     SplitExpenseRequest, BudgetAdjustmentRequest, ExportExpensesRequest,
     UserDashboard, TripSummaryCard, RecentActivity, BudgetInsight,
     OTPRequest, OTPVerifyRequest, OTPResponse
-    , UpdatePreferencesRequest
+    , UpdatePreferencesRequest,
+    TripFeedbackRequest, TripFeedbackResponse, FeedbackStatsResponse
 )
 from agent_logic import (
     RESEARCH_TOOLS,
@@ -114,6 +115,7 @@ from google_calendar_import_service import get_calendar_import_service
 from expense_tracker_service import get_expense_tracker_service
 from dashboard_service import get_dashboard_service
 from otp_service import get_otp_service
+from feedback_service import get_feedback_service
 
 # =========================
 # Exception Handler
@@ -7067,6 +7069,113 @@ async def get_trip_summary(
     except Exception as e:
         print(f"❌ Error getting trip summary: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# POST-TRIP FEEDBACK ENDPOINTS
+# ============================================================================
+
+@app.post("/api/feedback/submit", response_model=TripFeedbackResponse)
+async def submit_trip_feedback(
+    request: TripFeedbackRequest,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Submit post-trip feedback
+    """
+    try:
+        feedback_service = get_feedback_service(firestore_service.db)
+        
+        # Verify trip ownership
+        trip = firestore_service.get_trip_plan_by_id(request.trip_id, current_user.uid)
+        if not trip:
+            raise HTTPException(status_code=404, detail="Trip not found or access denied")
+        
+        # Submit feedback
+        feedback = feedback_service.submit_feedback(
+            trip_id=request.trip_id,
+            user_id=current_user.uid,
+            rating=request.rating,
+            experience=request.experience,
+            would_recommend=request.would_recommend,
+            highlights=request.highlights,
+            improvements=request.improvements,
+            comment=request.comment
+        )
+        
+        return TripFeedbackResponse(
+            success=True,
+            message="Thank you for your feedback!",
+            feedback_id=feedback.get('feedback_id'),
+            feedback=feedback
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error submitting feedback: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to submit feedback: {str(e)}")
+
+
+@app.get("/api/feedback/trip/{trip_id}", response_model=TripFeedbackResponse)
+async def get_trip_feedback(
+    trip_id: str,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Get feedback for a specific trip
+    """
+    try:
+        feedback_service = get_feedback_service(firestore_service.db)
+        
+        # Verify trip ownership
+        trip = firestore_service.get_trip_plan_by_id(trip_id, current_user.uid)
+        if not trip:
+            raise HTTPException(status_code=404, detail="Trip not found or access denied")
+        
+        feedback = feedback_service.get_trip_feedback(trip_id)
+        
+        if not feedback:
+            return TripFeedbackResponse(
+                success=False,
+                message="No feedback submitted yet"
+            )
+        
+        return TripFeedbackResponse(
+            success=True,
+            message="Feedback retrieved",
+            feedback_id=feedback.get('feedback_id'),
+            feedback=feedback
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error getting feedback: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get feedback: {str(e)}")
+
+
+@app.get("/api/feedback/stats", response_model=FeedbackStatsResponse)
+async def get_feedback_stats(
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Get overall feedback statistics (admin only in production)
+    """
+    try:
+        feedback_service = get_feedback_service(firestore_service.db)
+        stats = feedback_service.get_feedback_stats()
+        
+        return FeedbackStatsResponse(
+            success=True,
+            **stats
+        )
+        
+    except Exception as e:
+        print(f"❌ Error getting feedback stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
 
 
 # ============================================================================

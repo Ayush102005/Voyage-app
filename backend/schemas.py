@@ -1451,4 +1451,37 @@ class OTPResponse(BaseModel):
     expires_in: Optional[int] = Field(default=None, description="OTP expiry time in seconds")
 
 
+# ============================================================================
+# POST-TRIP FEEDBACK SCHEMAS
+# ============================================================================
+
+class TripFeedbackRequest(BaseModel):
+    """Request to submit post-trip feedback"""
+    trip_id: str = Field(description="Trip ID")
+    rating: int = Field(ge=1, le=5, description="Overall rating (1-5 stars)")
+    experience: str = Field(description="Overall experience: excellent, good, average, poor")
+    would_recommend: bool = Field(description="Would you recommend this trip?")
+    highlights: List[str] = Field(default_factory=list, description="Trip highlights")
+    improvements: List[str] = Field(default_factory=list, description="Areas for improvement")
+    comment: Optional[str] = Field(default=None, description="Additional comments")
+
+
+class TripFeedbackResponse(BaseModel):
+    """Response for feedback submission"""
+    success: bool
+    message: str
+    feedback_id: Optional[str] = None
+    feedback: Optional[Dict[str, Any]] = None
+
+
+class FeedbackStatsResponse(BaseModel):
+    """Response for feedback statistics"""
+    success: bool
+    total_feedback: int
+    average_rating: float
+    recommendation_rate: float
+    top_highlights: List[Dict[str, Any]]
+    common_improvements: List[Dict[str, Any]]
+
+
 
