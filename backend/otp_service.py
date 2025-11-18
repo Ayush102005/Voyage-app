@@ -63,20 +63,22 @@ class OTPService:
                 print(f"📱 Console OTP: {otp}")
                 return True
             
+            # Use Fast2SMS quick/promotional route (no sender ID needed)
             url = "https://www.fast2sms.com/dev/bulkV2"
             
+            # Promotional route for quick SMS
+            message = f"Your Voyage verification code is {otp}. Valid for {OTP_VALIDITY_MINUTES} minutes. Do not share."
+            
             payload = {
-                "route": "v3",
-                "sender_id": "FTWSMS",
-                "message": f"Your Voyage verification code is {otp}. Valid for {OTP_VALIDITY_MINUTES} minutes. Do not share with anyone.",
+                "route": "q",
+                "message": message,
                 "language": "english",
                 "flash": 0,
-                "numbers": clean_number
+                "numbers": clean_number,
             }
             
             headers = {
-                "authorization": api_key,
-                "Content-Type": "application/json"
+                "authorization": api_key
             }
             
             response = requests.post(url, json=payload, headers=headers, timeout=10)
