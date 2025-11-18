@@ -307,7 +307,7 @@ const HomePage = () => {
                 <span className="text-2xl font-bold gradient-text">Voyage</span>
               </div>
               <p className="text-neutral-400 text-sm">
-                AI-powered travel planning for unforgettable Indian journeys.
+                AI-powered travel assistant for unforgettable Indian journeys.
               </p>
             </div>
 
