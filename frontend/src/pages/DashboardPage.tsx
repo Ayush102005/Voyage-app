@@ -33,6 +33,8 @@ const DashboardPage = () => {
   const [showAIEditModal, setShowAIEditModal] = useState(false)
   const [aiEditPrompt, setAiEditPrompt] = useState('')
   const [isReplanning, setIsReplanning] = useState(false)
+  // Mobile menu state
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -501,11 +503,37 @@ const DashboardPage = () => {
 
   return (
     <div className="h-screen bg-black flex overflow-hidden">
-      <aside className="w-80 bg-neutral-900 border-r border-neutral-800 flex flex-col overflow-y-auto">
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+      
+      {/* Sidebar - Hidden on mobile, slide in when menu open */}
+      <aside className={`
+        fixed lg:relative inset-y-0 left-0 z-50
+        w-80 bg-neutral-900 border-r border-neutral-800 
+        flex flex-col overflow-y-auto
+        transform transition-transform duration-300 ease-in-out
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
         <div className="p-6 border-b border-neutral-800 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-3xl">✈️</span>
-            <span className="text-2xl font-bold gradient-text">Voyage</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-3xl">✈️</span>
+              <span className="text-2xl font-bold gradient-text">Voyage</span>
+            </div>
+            {/* Mobile close button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="lg:hidden text-neutral-400 hover:text-white"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -596,25 +624,35 @@ const DashboardPage = () => {
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="bg-black/80 backdrop-blur-lg border-b border-neutral-800 px-8 py-4 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">
+        <header className="bg-black/80 backdrop-blur-lg border-b border-neutral-800 px-4 sm:px-6 lg:px-8 py-4 flex-shrink-0">
+          <div className="flex items-center justify-between gap-4">
+            {/* Mobile hamburger menu */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden text-neutral-400 hover:text-white flex-shrink-0"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold flex-1 min-w-0">
             {activeView === 'chat' && viewingSavedTrip && (
-              <>Saved Trip: <span className="gradient-text">{currentTripTitle}</span></>
+              <><span className="hidden sm:inline">Saved Trip: </span><span className="gradient-text truncate">{currentTripTitle}</span></>
             )}
             {activeView === 'chat' && !viewingSavedTrip && (
-              <>Plan Your <span className="gradient-text">Journey</span></>
+              <><span className="hidden sm:inline">Plan Your </span><span className="gradient-text">Journey</span></>
             )}
             {activeView === 'foryou' && (
-              <>Personalized <span className="gradient-text">For You</span></>
+              <><span className="hidden sm:inline">Personalized </span><span className="gradient-text">For You</span></>
             )}
             {activeView === 'mytrips' && (
-              <>My <span className="gradient-text">Trips</span></>
+              <><span className="hidden sm:inline">My </span><span className="gradient-text">Trips</span></>
             )}
           </h1>
           <NotificationBell />
           </div>
-          <p className="text-sm text-neutral-400 mt-1">
+          <p className="text-xs sm:text-sm text-neutral-400 mt-1 hidden sm:block">
             {activeView === 'chat' && viewingSavedTrip && "Viewing your saved itinerary"}
             {activeView === 'chat' && !viewingSavedTrip && "Tell me your destination, budget, and dates - I'll create your perfect itinerary"}
             {activeView === 'foryou' && "Personalized recommendations based on your travel preferences"}
@@ -624,17 +662,17 @@ const DashboardPage = () => {
 
         {activeView === 'chat' && (
           <>
-            <div ref={chatAreaRef} className="flex-1 overflow-y-auto p-8" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-              <div className="max-w-4xl mx-auto space-y-6 pb-6">
+            <div ref={chatAreaRef} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+              <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 pb-6">
                 {!generatedPlan && (
-                  <div className="text-center py-12">
-                    <span className="text-6xl mb-4 block">✨</span>
-                    <h2 className="text-2xl font-bold mb-3">Ready to explore?</h2>
+                  <div className="text-center py-8 sm:py-12">
+                    <span className="text-4xl sm:text-6xl mb-4 block">✨</span>
+                    <h2 className="text-xl sm:text-2xl font-bold mb-3">Ready to explore?</h2>
                     <p className="text-neutral-400 mb-8">
                       Start planning your next adventure. I'll consider your preferences and create a personalized itinerary!
                     </p>
 
-                    <div className="grid gap-3 max-w-2xl mx-auto">
+                    <div className="grid gap-2 sm:gap-3 max-w-2xl mx-auto">
                       {[
                         "Plan a 5-day trip to Goa from Mumbai under ₹30,000",
                         "Weekend getaway to Manali for adventure activities",
@@ -646,7 +684,7 @@ const DashboardPage = () => {
                             setInput(example)
                             await sendPrompt(example, undefined, undefined)
                           }}
-                          className="px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-left hover:border-teal-600/50 transition-colors text-sm"
+                          className="px-3 sm:px-4 py-2 sm:py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-left hover:border-teal-600/50 transition-colors text-xs sm:text-sm"
                         >
                           {example}
                         </button>
@@ -663,14 +701,14 @@ const DashboardPage = () => {
                         {chatHistory.slice(0, -1).map((msg, idx) => (
                           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             {msg.role === 'user' ? (
-                              <div className="bg-teal-600 text-white rounded-2xl rounded-tr-sm px-6 py-3 max-w-[80%]">
-                                <p className="text-sm font-medium mb-1">You:</p>
-                                <p className="text-sm">{msg.content}</p>
+                              <div className="bg-teal-600 text-white rounded-2xl rounded-tr-sm px-4 sm:px-6 py-2 sm:py-3 max-w-[85%] sm:max-w-[80%]">
+                                <p className="text-xs sm:text-sm font-medium mb-1">You:</p>
+                                <p className="text-xs sm:text-sm">{msg.content}</p>
                               </div>
                             ) : (
-                              <div className="bg-neutral-800 text-white rounded-2xl rounded-tl-sm px-6 py-3 max-w-[80%]">
-                                <p className="text-sm font-medium mb-1 text-teal-400">AI Assistant:</p>
-                                <div className="text-sm prose prose-invert max-w-none" 
+                              <div className="bg-neutral-800 text-white rounded-2xl rounded-tl-sm px-4 sm:px-6 py-2 sm:py-3 max-w-[85%] sm:max-w-[80%]">
+                                <p className="text-xs sm:text-sm font-medium mb-1 text-teal-400">AI Assistant:</p>
+                                <div className="text-xs sm:text-sm prose prose-invert max-w-none" 
                                   dangerouslySetInnerHTML={{ __html: msg.content.substring(0, 200) + (msg.content.length > 200 ? '...' : '') }}
                                 />
                               </div>
@@ -681,30 +719,30 @@ const DashboardPage = () => {
                     )}
                     
                     {viewingSavedTrip && (
-                      <div className="bg-teal-900/20 border border-teal-600/30 rounded-lg p-4 mb-4">
-                        <p className="text-teal-400 text-sm flex items-center gap-2">
-                          <span>📋</span>
+                      <div className="bg-teal-900/20 border border-teal-600/30 rounded-lg p-3 sm:p-4 mb-4">
+                        <p className="text-teal-400 text-xs sm:text-sm flex items-start sm:items-center gap-2">
+                          <span className="flex-shrink-0">📋</span>
                           <span>You are viewing a saved trip. Click <strong>Edit</strong> to make changes or <strong>New Chat</strong> to plan a new trip.</span>
                         </p>
                       </div>
                     )}
-                    <div className="flex justify-between items-center flex-wrap gap-4">
-                      <h3 className="text-xl font-bold flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+                      <h3 className="text-lg sm:text-xl font-bold flex items-center gap-2">
                         <span>✈️</span> {viewingSavedTrip ? 'Saved Itinerary' : 'Your Itinerary'}
                       </h3>
-                      <div className="flex gap-2 flex-wrap">
+                      <div className="flex gap-2 flex-wrap w-full sm:w-auto">
                         <button
                           onClick={handleSaveTrip}
-                          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                          className="px-3 sm:px-4 py-2 bg-teal-600 hover:bg-teal-700 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 flex-1 sm:flex-initial justify-center"
                         >
-                          <span>💾</span> Save Trip
+                          <span>💾</span> <span className="hidden sm:inline">Save </span>Trip
                         </button>
                         {currentTripId && (
                           <button
                             onClick={() => setShowAIEditModal(true)}
-                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                            className="px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 flex-1 sm:flex-initial justify-center"
                           >
-                            <span>✨</span> Edit Trip
+                            <span>✨</span> Edit
                           </button>
                         )}
                         <button
@@ -716,10 +754,10 @@ const DashboardPage = () => {
                               duration: 6000 
                             })
                           }}
-                          className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg text-sm font-semibold transition-all flex items-center gap-2"
+                          className="px-3 sm:px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 flex-1 sm:flex-initial justify-center"
                           title="Get AI-powered suggestions to optimize your current day based on location, time, and interests"
                         >
-                          <span>✨</span> Optimize Today
+                          <span>✨</span> <span className="hidden sm:inline">Optimize </span>Today
                         </button>
                         <button
                           onClick={() => {
@@ -727,7 +765,7 @@ const DashboardPage = () => {
                             setPreviousExtraction(null)
                             setSelectedDay(null)
                           }}
-                          className="text-sm text-neutral-500 hover:text-teal-600 px-3"
+                          className="text-xs sm:text-sm text-neutral-500 hover:text-teal-600 px-2 sm:px-3"
                         >
                           Clear ✕
                         </button>
@@ -774,12 +812,12 @@ const DashboardPage = () => {
                             </button>
                           )}
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-nowrap gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent">
                           {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => (
                             <button
                               key={day}
                               onClick={() => selectDay(day)}
-                              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex-shrink-0 ${
                                 selectedDay === day
                                   ? 'bg-teal-600 text-white'
                                   : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
@@ -807,9 +845,9 @@ const DashboardPage = () => {
             </div>
 
             {!viewingSavedTrip && (
-              <div className="border-t border-neutral-800 bg-neutral-900/95 backdrop-blur-lg p-6 flex-shrink-0">
+              <div className="border-t border-neutral-800 bg-neutral-900/95 backdrop-blur-lg p-3 sm:p-4 lg:p-6 flex-shrink-0">
                 <div className="max-w-4xl mx-auto">
-                  <div className="flex gap-4">
+                  <div className="flex gap-2 sm:gap-4">
                     <input
                       type="text"
                       value={input}
@@ -817,12 +855,12 @@ const DashboardPage = () => {
                       onKeyPress={(e) => e.key === 'Enter' && !isGenerating && handleSendMessage()}
                       placeholder="Describe your dream trip..."
                       disabled={isGenerating}
-                      className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-6 py-4 text-white placeholder-neutral-500 focus:outline-none focus:border-teal-600 transition-colors disabled:opacity-50"
+                      className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base text-white placeholder-neutral-500 focus:outline-none focus:border-teal-600 transition-colors disabled:opacity-50"
                     />
                     <button
                       onClick={handleSendMessage}
                       disabled={!input.trim() || isGenerating}
-                      className="btn-primary px-8 disabled:opacity-50 disabled:cursor-not-allowed min-w-[140px]"
+                      className="btn-primary px-4 sm:px-6 lg:px-8 disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px] sm:min-w-[140px] text-sm sm:text-base"
                     >
                       {isGenerating ? (
                         <span className="flex items-center gap-2 justify-center">
@@ -846,34 +884,34 @@ const DashboardPage = () => {
             <div className="max-w-4xl mx-auto">
               {forYouData && forYouData.suggestions ? (
                 <>
-                  <div className="text-center py-8 mb-8">
-                    <span className="text-6xl mb-4 block">🎯</span>
-                    <h2 className="text-2xl font-bold mb-3">Personalized For You</h2>
-                    <p className="text-neutral-400">
+                  <div className="text-center py-6 sm:py-8 mb-6 sm:mb-8">
+                    <span className="text-4xl sm:text-6xl mb-4 block">🎯</span>
+                    <h2 className="text-xl sm:text-2xl font-bold mb-2 sm:mb-3">Personalized For You</h2>
+                    <p className="text-sm sm:text-base text-neutral-400">
                       Based on your {preferences?.travelStyle} travel style with real-time updates
                     </p>
                   </div>
 
-                  <div className="grid gap-6">
+                  <div className="grid gap-4 sm:gap-6">
                     {forYouData.suggestions.map((rec: any, idx: number) => (
-                      <div key={idx} className="card p-6 hover:border-teal-600/50 transition-colors">
-                        <div className="flex items-start gap-4 mb-4">
-                          <span className="text-4xl">✈️</span>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-xl font-bold">{rec.destination}</h3>
+                      <div key={idx} className="card p-4 sm:p-6 hover:border-teal-600/50 transition-colors">
+                        <div className="flex items-start gap-3 sm:gap-4 mb-3 sm:mb-4">
+                          <span className="text-3xl sm:text-4xl flex-shrink-0">✈️</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                              <h3 className="text-lg sm:text-xl font-bold">{rec.destination}</h3>
                               {rec.urgency && (
-                                <span className="px-2 py-1 bg-red-600/20 text-red-400 rounded-full text-xs font-semibold">
+                                <span className="px-2 py-1 bg-red-600/20 text-red-400 rounded-full text-xs font-semibold whitespace-nowrap">
                                   ⏰ {rec.urgency}
                                 </span>
                               )}
                             </div>
-                            <h4 className="text-lg text-teal-400 mb-2">{rec.title}</h4>
-                            <p className="text-neutral-400 text-sm mb-3">{rec.description}</p>
-                            <p className="text-neutral-300 text-sm mb-3">
+                            <h4 className="text-base sm:text-lg text-teal-400 mb-2">{rec.title}</h4>
+                            <p className="text-neutral-400 text-xs sm:text-sm mb-2 sm:mb-3">{rec.description}</p>
+                            <p className="text-neutral-300 text-xs sm:text-sm mb-2 sm:mb-3">
                               <span className="text-teal-400 font-semibold">Why for you:</span> {rec.reason}
                             </p>
-                            <div className="flex flex-wrap gap-2 mb-3">
+                            <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-2 sm:mb-3">
                               {rec.category && (
                                 <span className="px-3 py-1 bg-teal-600/20 text-teal-400 rounded-full text-xs font-semibold capitalize">
                                   {rec.category.replace(/_/g, ' ')}
@@ -1000,23 +1038,23 @@ const DashboardPage = () => {
                     </p>
                   </div>
 
-                  <div className="grid gap-6">
+                  <div className="grid gap-4 sm:gap-6">
                     {myTripsData.map((trip: any, idx: number) => (
-                      <div key={idx} className="card p-6 hover:border-teal-600/50 transition-colors">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="flex-1">
-                            <h3 className="text-xl font-bold mb-2">{trip.destination || 'Trip Plan'}</h3>
-                            <p className="text-neutral-300 text-sm mb-4">{trip.itinerary?.slice(0, 150)}...</p>
+                      <div key={idx} className="card p-4 sm:p-6 hover:border-teal-600/50 transition-colors">
+                        <div className="flex justify-between items-start mb-3 sm:mb-4">
+                          <div className="flex-1 min-w-0 pr-3">
+                            <h3 className="text-lg sm:text-xl font-bold mb-2 truncate">{trip.destination || 'Trip Plan'}</h3>
+                            <p className="text-neutral-300 text-xs sm:text-sm mb-3 sm:mb-4 line-clamp-2">{trip.itinerary?.slice(0, 150)}...</p>
                             {trip.dates && (
-                              <p className="text-neutral-500 text-xs mb-2">📅 {trip.dates}</p>
+                              <p className="text-neutral-500 text-xs mb-1 sm:mb-2">📅 {trip.dates}</p>
                             )}
                             {trip.budget && (
                               <p className="text-neutral-500 text-xs">💰 Budget: ₹{trip.budget.toLocaleString()}</p>
                             )}
                           </div>
-                          <span className="text-3xl ml-4">✈️</span>
+                          <span className="text-2xl sm:text-3xl flex-shrink-0">✈️</span>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                           <button 
                             onClick={() => {
                               // Clear any previous generation state
@@ -1051,7 +1089,7 @@ const DashboardPage = () => {
                               // Switch to chat view to display the plan
                               setActiveView('chat')
                             }}
-                            className="btn-primary py-2 text-sm"
+                            className="btn-primary py-2 text-xs sm:text-sm"
                           >
                             📋 View
                           </button>
@@ -1069,9 +1107,9 @@ const DashboardPage = () => {
                               ])
                               setShowAIEditModal(true)
                             }}
-                            className="bg-teal-600 hover:bg-teal-700 text-white py-2 rounded-lg text-sm transition-colors"
+                            className="bg-teal-600 hover:bg-teal-700 text-white py-2 rounded-lg text-xs sm:text-sm transition-colors"
                           >
-                            🤖 Edit Trip
+                            🤖 Edit
                           </button>
                           <button 
                             onClick={async () => {
