@@ -177,10 +177,49 @@
   .prose a:hover {
     color: #A2C4E0;
   }
+
+  /* Mobile-specific optimizations */
+  @media (max-width: 640px) {
+    .btn-primary, .btn-secondary {
+      @apply px-4 py-2 text-sm;
+    }
+
+    .card {
+      @apply p-4;
+    }
+
+    .prose {
+      font-size: 0.75rem;
+    }
+  }
+
+  /* Utility classes for mobile scroll */
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-neutral-700 rounded-full;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-neutral-600;
+  }
 }
 
 ::-webkit-scrollbar {
   width: 10px;
+}
+
+/* Mobile scrollbar - thinner */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
 }
 
 ::-webkit-scrollbar-track {
