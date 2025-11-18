@@ -76,7 +76,7 @@ const DashboardPage = () => {
       .replace(/^[-•] (.+)$/gm, '<li class="ml-4 mb-1">$1</li>')
       .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 mb-1">$1</li>')
       .replace(/^([🏨🍽️✈️🚗🎯💰📍🗓️⏰🌟].+)$/gm, '<p class="ml-2 mb-2">$1</p>')
-      // Convert markdown links [text](url) to HTML links
+      // Convert ALL markdown links to open in new tab (external links)
       .replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-teal-400 hover:text-teal-300 underline">$1</a>')
       .replace(/\n\n/g, '</p><p class="mb-3">')
       .replace(/\n/g, '<br>')
