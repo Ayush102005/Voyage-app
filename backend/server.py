@@ -790,7 +790,7 @@ Insider tips:
 - Order food slightly less spicy (default is very spicy for tourist palates)
 - Skip desserts here (heavy meal), get kulfi from nearby Kuremal later
 
-📱 [View on Zomato](https://www.zomato.com/delhi/al-jawahar-old-delhi)"
+📱 [View on Zomato](https://www.google.com/search?q=Al+Jawahar+Old+Delhi+zomato)"
 
 **Example 4: Day Planning with Logical Flow**
 ❌ BAD: "Morning: Beach. Afternoon: Fort. Evening: Market."
@@ -883,7 +883,7 @@ For every meal, use your food finder to recommend:
 � CRITICAL: ALL BOOKING LINKS MUST BE ACTUAL WORKING URLS - NO PLACEHOLDERS!
 - Hotels: CALL get_booking_link tool and insert real URL
 - Flights: Use https://www.makemytrip.com/flight/search?itinerary=ORIGIN-DESTINATION-DD/MM/YYYY&tripType=O&paxType=A-1_C-0_I-0&intl=false&cabinClass=E&lang=eng
-- Restaurants: Use https://www.zomato.com/[city]/[restaurant-name-with-hyphens]
+- Restaurants: Use https://www.google.com/search?q=RESTAURANT+NAME+CITY+zomato (replace spaces with +)
 - Images: Use https://source.unsplash.com/1600x900/?keyword1,keyword2 for destination photos
 - See examples below for exact format
 
@@ -997,12 +997,12 @@ Evening (6:00 PM onwards):
 
 🍽️ Food: 
 • Breakfast: [Specific place] - [Signature dish] (₹[Price])
-  **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
-  Replace spaces with hyphens, lowercase, format: zomato.com/[city]/[restaurant-name]
+  **📱 [View on Zomato](https://www.google.com/search?q=Restaurant+Name+City+zomato)**
+  Replace spaces with +, format: google.com/search?q=RESTAURANT+NAME+CITY+zomato
 • Lunch: [Specific place] - [Must-try item] (₹[Price])
-  **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
+  **📱 [View on Zomato](https://www.google.com/search?q=Restaurant+Name+City+zomato)**
 • Dinner: [Specific place] - [Local specialty] (₹[Price])
-  **📱 [View on Zomato](https://www.zomato.com/munnar/restaurant-name-with-hyphens)**
+  **📱 [View on Zomato](https://www.google.com/search?q=Restaurant+Name+City+zomato)**
 
 🏨 Accommodation: [Specific hotel name] - ₹[Price/night]
    Why this choice: [Brief explanation of why this property suits their budget tier]
