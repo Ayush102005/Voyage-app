@@ -2909,6 +2909,21 @@ FORMAT YOUR RESPONSE:
 
 ---
 
+## 🔗 BOOKING LINKS
+
+### ✈️ Flights
+**📱 [Book Outbound Flight: {destination} → Return](https://www.makemytrip.com/flight/search?itinerary=ORIGIN-DESTINATION-DD/MM/YYYY&tripType=R&paxType=A-{num_people}_C-0_I-0&intl=false&cabinClass=E&lang=eng)**
+- Use actual origin city airport code
+- Use actual dates from trip
+- Estimated: ₹[amount] per person
+
+### 🏨 Hotels
+**📱 [Book {hotel_name}](actual_booking_link_from_get_booking_link_tool)**
+- Call get_booking_link tool for each hotel
+- {duration} nights total
+
+---
+
 ## 📋 Your Replanned {duration}-Day Itinerary for {destination}
 
 ### 📅 Day 1: [Title]
@@ -2916,20 +2931,28 @@ FORMAT YOUR RESPONSE:
 **Morning (8:00 AM - 12:00 PM)**
 - [Activity details with timing]
 - 🚗 Transport: [Mode and cost]
+  - **💡 Tip:** Download Ola/Uber app for easy bookings
 - 💰 Cost: ₹[amount]
 
 **Afternoon (12:00 PM - 5:00 PM)**
 - [Activity details]
-- 🍽️ Lunch: [Restaurant name and details]
+- 🍽️ Lunch: [Restaurant Name] - [Signature Dish]
+  - **📱 [View on Zomato](https://www.google.com/search?q=Restaurant+Name+City+zomato)**
+  - Price: ₹[amount] for {num_people}
+  - 💡 What to order: [Specific dishes with brief description]
 - 💰 Cost: ₹[amount]
 
 **Evening (5:00 PM - 10:00 PM)**
 - [Activity details]
-- 🍽️ Dinner: [Restaurant name and details]
+- 🍽️ Dinner: [Restaurant Name] - [Specialty]
+  - **📱 [View on Zomato](https://www.google.com/search?q=Restaurant+Name+City+zomato)**
+  - Price: ₹[amount]
+  - 💡 Insider tip: [Reservation advice, best time, signature dish]
 - 💰 Cost: ₹[amount]
 
 **🏨 Accommodation:** [Hotel Name](booking_link)
 - Why chosen: [Brief explanation]
+- **📱 [Book Now](actual_booking_url_from_tool)**
 - Cost: ₹[amount]/night
 
 ---
@@ -2950,13 +2973,49 @@ FORMAT YOUR RESPONSE:
 
 | Category | Details | Cost (₹) |
 |----------|---------|----------|
-| 🏨 Accommodation | [Hotel Name] × [nights] nights | [amount] |
-| ✈️ Transportation | [Flights/trains/local travel] | [amount] |
-| 🍽️ Food | All meals for {duration} days | [amount] |
+| ✈️ Flights | Round-trip for {num_people} person(s) | [amount] |
+| 🏨 Accommodation | [Hotel Name] × {duration} nights | [amount] |
+| 🍽️ Food | All meals ({duration} days × 3 meals) | [amount] |
 | 🎫 Activities | Entry fees, tours, experiences | [amount] |
-| 🚗 Local Transport | Cabs, autos, metros | [amount] |
+| 🚗 Local Transport | Cabs, autos, metros, rentals | [amount] |
 | 🛍️ Shopping & Misc | Souvenirs, tips, extras | [amount] |
 | **GRAND TOTAL** | | **₹[amount]** |
+
+---
+
+## 🚗 Transportation Tips
+
+**Getting Around {destination}:**
+- **✅ Best Option:** [Ola/Uber/Metro/Auto - based on destination]
+- **💰 Average Costs:** 
+  - Short distance (< 5km): ₹[amount]
+  - Medium distance (5-15km): ₹[amount]
+  - Long distance (> 15km): ₹[amount]
+- **📱 Recommended Apps:**
+  - Ola Cabs (Download: [iOS](https://apps.apple.com/app/ola-cabs) | [Android](https://play.google.com/store/apps/details?id=com.olacabs.customer))
+  - Uber (Download: [iOS](https://apps.apple.com/app/uber) | [Android](https://play.google.com/store/apps/details?id=com.ubercab))
+  - [City-specific app if applicable]
+- **💡 Pro Tips:**
+  - Book cabs 10-15 minutes before you need them
+  - Keep cash handy as backup
+  - Share your ride details with family/friends
+
+---
+
+## 🍽️ Food Recommendations Summary
+
+**Must-Try Restaurants:**
+1. **[Restaurant 1]** - [Cuisine Type]
+   - 📱 [View on Zomato](google_search_link)
+   - Best for: [Breakfast/Lunch/Dinner]
+   - Signature: [Dish name]
+   
+2. **[Restaurant 2]** - [Cuisine Type]
+   - 📱 [View on Zomato](google_search_link)
+   - Best for: [Meal type]
+   - Must-order: [Dish name]
+
+[List 3-5 key restaurants from the itinerary]
 
 ---
 
