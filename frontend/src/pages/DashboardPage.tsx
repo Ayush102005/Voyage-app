@@ -77,19 +77,31 @@ const DashboardPage = () => {
     if (!text) return ''
     
     let formatted = text
+      // Convert images FIRST before links (to avoid conflicts)
+      .replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" class="w-full rounded-lg my-4 max-h-96 object-cover" />')
+      // Bold text
       .replace(/\*\*(.+?)\*\*/g, '<strong class="text-teal-500">$1</strong>')
+      // Day headings (e.g., "Day 1: Title")
       .replace(/^(Day \d+:.+)$/gm, '<h3 class="text-xl font-bold text-white mt-6 mb-3">$1</h3>')
+      // Section headings (##)
       .replace(/^## (.+)$/gm, '<h3 class="text-lg font-bold text-teal-400 mt-4 mb-2">$1</h3>')
+      // Subsection headings (###)
+      .replace(/^### (.+)$/gm, '<h4 class="text-base font-semibold text-teal-300 mt-3 mb-2">$1</h4>')
+      // Bullet points
       .replace(/^[-•] (.+)$/gm, '<li class="ml-4 mb-1">$1</li>')
+      // Numbered lists
       .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 mb-1">$1</li>')
-      .replace(/^([🏨🍽️✈️🚗🎯💰📍🗓️⏰🌟].+)$/gm, '<p class="ml-2 mb-2">$1</p>')
-      // Convert ALL markdown links to open in new tab (external links)
+      // Emoji paragraphs
+      .replace(/^([🏨🍽️✈️🚗🎯💰📍🗓️⏰🌟✅❌💡⚠️📱🌍].+)$/gm, '<p class="ml-2 mb-2">$1</p>')
+      // Convert markdown links to HTML (after images)
       .replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-teal-400 hover:text-teal-300 underline">$1</a>')
+      // Paragraphs
       .replace(/\n\n/g, '</p><p class="mb-3">')
       .replace(/\n/g, '<br>')
     
     formatted = '<p class="mb-3">' + formatted + '</p>'
     
+    // Wrap consecutive list items in ul tags
     formatted = formatted.replace(/(<li.+?<\/li>(?:<br>)?)+/gs, (match) => {
       return '<ul class="list-disc list-inside space-y-1 mb-4">' + match.replace(/<br>/g, '') + '</ul>'
     })
