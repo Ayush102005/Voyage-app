@@ -48,6 +48,18 @@ const DashboardPage = () => {
     }
   }, [user, loading, navigate, preferences])
 
+  // Show loading screen while auth state is being determined
+  if (loading) {
+    return (
+      <div className="h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500"></div>
+          <p className="mt-4 text-neutral-400">Loading your dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
   useEffect(() => {
     if (chatAreaRef.current && generatedPlan) {
       chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight

@@ -15,42 +15,76 @@ const LoginPage = () => {
 
   const checkProfileAndNavigate = async (userId: string) => {
     try {
+      console.log('🔍 Checking profile and navigation for user:', userId)
+      
       // Get Firebase token
       const firebaseUser = auth.currentUser
-      const token = firebaseUser ? await firebaseUser.getIdToken() : ''
+      if (!firebaseUser) {
+        console.error('❌ No Firebase user found')
+        toast.error('Authentication failed')
+        return
+      }
+      
+      const token = await firebaseUser.getIdToken()
+      console.log('✅ Got Firebase token')
       
       // Check profile status from backend (includes phone verification)
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      console.log('🌐 API URL:', apiUrl)
+      
       const profileResponse = await fetch(`${apiUrl}/api/profile/status`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
       
-      if (profileResponse.ok) {
-        const profileStatus = await profileResponse.json()
+      console.log('📡 Profile status response:', profileResponse.status)
+      
+      if (!profileResponse.ok) {
+        console.error('❌ Profile status check failed:', profileResponse.statusText)
+        // On API error, just go to dashboard
+        console.log('🔄 API error - navigating to dashboard as fallback')
+        navigate('/dashboard')
+        return
+      }
+      
+      const profileStatus = await profileResponse.json()
+      console.log('📊 Profile status:', profileStatus)
+      
+      // If no phone number, redirect to phone verification
+      if (!profileStatus.has_phone_number || !profileStatus.phone_verified) {
+        console.log('📱 Redirecting to phone verification')
+        navigate('/phone-verification')
+        return
+      }
+      
+      // Check if user profile exists in Firestore
+      console.log('🔍 Checking Firestore for user profile...')
+      const userDoc = await getDoc(doc(db, 'users', userId))
+      console.log('📄 Firestore document exists:', userDoc.exists())
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data()
+        console.log('👤 User data:', userData)
         
-        // If no phone number, redirect to phone verification
-        if (!profileStatus.has_phone_number || !profileStatus.phone_verified) {
-          navigate('/phone-verification')
+        if (userData?.profileComplete) {
+          // Profile exists and is complete
+          console.log('✅ Profile complete, navigating to dashboard')
+          setPreferences(userData)
+          navigate('/dashboard')
           return
         }
       }
       
-      // Check if user profile exists in Firestore
-      const userDoc = await getDoc(doc(db, 'users', userId))
-      
-      if (userDoc.exists() && userDoc.data()?.profileComplete) {
-        // Profile exists and is complete
-        setPreferences(userDoc.data())
-        navigate('/dashboard')
-      } else {
-        // Profile doesn't exist or incomplete - redirect to quiz
-        navigate('/profile-quiz')
-      }
-    } catch (error) {
-      console.error('Error checking profile:', error)
+      // Profile doesn't exist or incomplete - redirect to quiz
+      console.log('📝 Redirecting to profile quiz')
       navigate('/profile-quiz')
+      
+    } catch (error: any) {
+      console.error('❌ Error checking profile:', error)
+      // On error, navigate to dashboard to unblock user
+      console.log('🔄 Error in profile check - navigating to dashboard')
+      navigate('/dashboard')
     }
   }
 
