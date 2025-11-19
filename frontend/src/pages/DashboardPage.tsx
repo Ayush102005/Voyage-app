@@ -19,11 +19,6 @@ const DashboardPage = () => {
   const [totalDays, setTotalDays] = useState(0)
   const [forYouData, setForYouData] = useState<any>(null)
   const [myTripsData, setMyTripsData] = useState<any[]>([])
-  // Date prompting states for planning
-  const [showDateModal, setShowDateModal] = useState(false)
-  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
-  const [startDate, setStartDate] = useState<string>('')
-  const [endDate, setEndDate] = useState<string>('')
   const [currentTripId, setCurrentTripId] = useState<string | null>(null)
   const [viewingSavedTrip, setViewingSavedTrip] = useState(false)
   const [currentTripTitle, setCurrentTripTitle] = useState('')
@@ -282,8 +277,8 @@ const DashboardPage = () => {
     }
   }
 
-  // send the prompt to the backend (expects optional start_date/end_date)
-  const sendPrompt = async (prompt: string, start_date?: string, end_date?: string) => {
+  // Send the prompt to the backend - AI will extract all details including dates from text
+  const sendPrompt = async (prompt: string) => {
     if (!prompt.trim() || !user) return
 
     // Clear viewing saved trip state when generating new plan
@@ -304,8 +299,6 @@ const DashboardPage = () => {
         prompt,
         previous_extraction: previousExtraction
       }
-      if (start_date) payload.start_date = start_date
-      if (end_date) payload.end_date = end_date
 
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
       const response = await fetch(`${apiUrl}/api/plan-trip-from-prompt`, {
@@ -352,82 +345,8 @@ const DashboardPage = () => {
   const handleSendMessage = async () => {
     if (!input.trim()) return
     
-    // Send directly - let backend AI ask for missing information conversationally
-    await sendPrompt(input, undefined, undefined)
-  }
-
-  // Accepts dates in formats like '15 nov', '15/11', '2025-11-15', etc.
-  function parseDateInput(dateStr: string): string | null {
-    if (!dateStr) return null
-    // Try ISO first
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr
-    // Try DD/MM or D/M
-    const slash = dateStr.match(/^(\d{1,2})[\/](\d{1,2})$/)
-    if (slash) {
-      const day = parseInt(slash[1], 10)
-      const month = parseInt(slash[2], 10)
-      // Use current year
-      const year = new Date().getFullYear()
-      // Pad
-      return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
-    }
-    // Try DD mon or D mon (e.g., 15 nov)
-    const monthNames = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
-    const word = dateStr.match(/^(\d{1,2})\s*([a-zA-Z]{3,})$/)
-    if (word) {
-      const day = parseInt(word[1], 10)
-      let month = monthNames.findIndex(m => word[2].toLowerCase().startsWith(m))
-      if (month !== -1) {
-        month += 1 // 1-based
-        const year = new Date().getFullYear()
-        return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
-      }
-    }
-    // Fallback: try Date.parse
-    const d = new Date(dateStr)
-    if (!isNaN(d.getTime())) {
-      return d.toISOString().slice(0,10)
-    }
-    return null
-  }
-
-  const confirmDatesAndSend = async () => {
-    // Validate both dates are provided
-    if (!startDate || !endDate) {
-      toast.error('Both start and end dates are required')
-      return
-    }
-    
-    // Accept flexible input
-    const parsedStart = parseDateInput(startDate)
-    const parsedEnd = parseDateInput(endDate)
-    
-    if (!parsedStart || !parsedEnd) {
-      toast.error('Please enter valid dates')
-      return
-    }
-    
-    // Check if dates are in the past
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    if (new Date(parsedStart) < today) {
-      toast.error('Start date cannot be in the past')
-      return
-    }
-    
-    if (new Date(parsedStart) > new Date(parsedEnd)) {
-      toast.error('Start date must be before end date')
-      return
-    }
-    
-    const promptToSend = pendingPrompt || input
-    setShowDateModal(false)
-    setPendingPrompt(null)
-    setStartDate('')
-    setEndDate('')
-    await sendPrompt(promptToSend, parsedStart, parsedEnd)
-    setStartDate('')
-    setEndDate('')
+    // Send directly - let backend AI extract all info including dates from the text
+    await sendPrompt(input)
   }
 
   const handleNewChat = () => {
@@ -674,7 +593,7 @@ const DashboardPage = () => {
                           key={idx}
                           onClick={async () => {
                             setInput(example)
-                            await sendPrompt(example, undefined, undefined)
+                            await sendPrompt(example)
                           }}
                           className="px-3 sm:px-4 py-2 sm:py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-left hover:border-teal-600/50 transition-colors text-xs sm:text-sm"
                         >
@@ -981,8 +900,7 @@ const DashboardPage = () => {
                             setActiveView('chat')
                             const p = `Plan a trip to ${rec.destination}`
                             setInput(p)
-                            setPendingPrompt(p)
-                            setShowDateModal(true)
+                            sendPrompt(p)
                           }}
                           className="btn-primary w-full py-2"
                         >
@@ -1352,72 +1270,6 @@ const DashboardPage = () => {
                   </button>
                 </div>
               )}
-            </div>
-          </div>
-        )}
-        {/* Date modal for planning */}
-        {showDateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => { setShowDateModal(false); setPendingPrompt(null); }} />
-            <div className="relative bg-neutral-900 border-2 border-teal-600/50 rounded-xl p-6 w-full max-w-md z-10 shadow-2xl">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-3xl">📅</span>
-                <h3 className="text-xl font-bold">Travel Dates Required</h3>
-              </div>
-              <p className="text-sm text-neutral-300 mb-6 leading-relaxed">
-                To create a personalized itinerary with accurate availability and pricing, please provide your travel dates.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="text-sm font-semibold text-neutral-200 mb-2 block">Start Date *</label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    required
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:border-teal-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-semibold text-neutral-200 mb-2 block">End Date *</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    min={startDate || new Date().toISOString().split('T')[0]}
-                    required
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 text-white focus:border-teal-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-              {startDate && endDate && new Date(startDate) <= new Date(endDate) && (
-                <div className="bg-teal-900/20 border border-teal-600/30 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-teal-400">
-                    ✓ Trip duration: {Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} days
-                  </p>
-                </div>
-              )}
-              <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
-                <button 
-                  onClick={() => { 
-                    setShowDateModal(false); 
-                    setPendingPrompt(null); 
-                    setStartDate('');
-                    setEndDate('');
-                  }} 
-                  className="px-5 py-2.5 text-sm text-neutral-300 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors order-2 sm:order-1"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={confirmDatesAndSend} 
-                  disabled={!startDate || !endDate}
-                  className="btn-primary px-6 py-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed order-1 sm:order-2"
-                >
-                  Create Itinerary →
-                </button>
-              </div>
             </div>
           </div>
         )}
