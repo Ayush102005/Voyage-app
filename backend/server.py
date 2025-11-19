@@ -2106,10 +2106,11 @@ USER MESSAGE: "{request.prompt}"
 Be smart and conversational in understanding:
 
 {"**SPECIAL RULE FOR FOLLOW-UP MESSAGES:**" if request.previous_extraction else ""}
-{"When the user's message is SHORT (1-5 words like 'Mumbai', '5 days', '30000'), they're answering what we asked for:" if request.previous_extraction else ""}
+{"When the user's message is SHORT (1-5 words like 'Mumbai', 'mumbai', '5 days', '30000'), they're answering what we asked for:" if request.previous_extraction else ""}
 {""  if request.previous_extraction else ""}
 {"**Field Matching Rules:**" if request.previous_extraction else ""}
-{"1. Single city/location name (e.g., 'mumbai', 'Delhi') → Fill the FIRST MISSING location field" if request.previous_extraction else ""}
+{"1. Single city/location name (e.g., 'mumbai', 'Delhi', 'Bangalore') → Fill the FIRST MISSING location field" if request.previous_extraction else ""}
+{"   - User can say just 'mumbai' OR 'from mumbai' - BOTH mean the same thing" if request.previous_extraction else ""}
 {"   - If origin_city is ❌ MISSING in the context above → Set origin_city, keep destination unchanged" if request.previous_extraction else ""}
 {"   - If origin_city is ✓ provided but destination is ❌ MISSING → Set destination, keep origin_city unchanged" if request.previous_extraction else ""}
 {"2. Number with 'days' (e.g., '5 days', '1 week') → Set num_days" if request.previous_extraction else ""}
@@ -2118,11 +2119,15 @@ Be smart and conversational in understanding:
 {""  if request.previous_extraction else ""}
 {"DO NOT CREATE A NEW TRIP ABOUT THAT CITY! Extract the specific field that's missing." if request.previous_extraction else ""}
 {""  if request.previous_extraction else ""}
-{"Example: Previous has origin_city='Not specified', destination='Rajasthan'. User says 'mumbai' → Set origin_city='Mumbai', keep destination='Rajasthan' (NOT a Mumbai trip!)" if request.previous_extraction else ""}
+{"Examples:" if request.previous_extraction else ""}
+{"- Previous: origin_city='Not specified', destination='Rajasthan'. User says 'mumbai' → origin_city='Mumbai', destination='Rajasthan'" if request.previous_extraction else ""}
+{"- Previous: origin_city='Not specified', destination='Goa'. User says 'from Delhi' → origin_city='Delhi', destination='Goa'" if request.previous_extraction else ""}
+{"- Previous: origin_city='Mumbai', destination='Not specified'. User says 'Kerala' → origin_city='Mumbai', destination='Kerala'" if request.previous_extraction else ""}
 {""  if request.previous_extraction else ""}
 
 1. **Origin City**: Where they're traveling FROM
-   - Look for: "from [city]", "leaving from", "starting in", "I'm in [city]"
+   - Look for: "from [city]", "leaving from", "starting in", "I'm in [city]", OR just "[city]" when origin is missing
+   - Accept BOTH "from Mumbai" AND just "Mumbai" as origin city
    - If not mentioned: Use "Not specified" (we'll ask them)
 
 2. **Destination**: Where they want to GO
