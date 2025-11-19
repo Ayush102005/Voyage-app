@@ -1840,8 +1840,10 @@ Analyze this user message and determine what they want:
 
 User message: "{request.prompt}"
 
+{"IMPORTANT CONTEXT: This is a FOLLOW-UP message. The user previously provided incomplete trip details and we asked for more information. This message is likely providing the MISSING information (like origin city, budget, date, etc.)." if request.previous_extraction else ""}
+
 Classify as ONE of these:
-- "TRIP_PLANNING" if provides trip details (destination + any of: days/budget/origin) OR clearly wants an itinerary
+- "TRIP_PLANNING" if provides trip details (destination + any of: days/budget/origin) OR clearly wants an itinerary OR is a SHORT FOLLOW-UP providing missing info (city name, date, number, budget)
 - "MODIFICATION_REQUEST" if asking to modify a plan (e.g., "use whole budget", "upgrade", "more activities") WITHOUT complete trip details
 - "DESTINATION_INQUIRY" if asking about a place but might want to plan a trip (e.g., "tell me about Kashmir", "what's good in Goa")
 - "RECOMMENDATION" if asking for suggestions (e.g., "where should I go?", "suggest a beach destination", "best hill stations")
@@ -1852,6 +1854,10 @@ Classify as ONE of these:
 **Examples:**
 - "5 day Goa trip" → TRIP_PLANNING
 - "Plan Kashmir trip from Delhi 50000 budget" → TRIP_PLANNING
+{"- 'mumbai' (when origin was missing) → TRIP_PLANNING (follow-up)" if request.previous_extraction else ""}
+{"- '50000' (when budget was missing) → TRIP_PLANNING (follow-up)" if request.previous_extraction else ""}
+{"- '22 nov' (when date was missing) → TRIP_PLANNING (follow-up)" if request.previous_extraction else ""}
+{"- 'from Delhi' (when origin was missing) → TRIP_PLANNING (follow-up)" if request.previous_extraction else ""}
 - "Use whole budget make it luxury" → MODIFICATION_REQUEST
 - "Tell me about Kerala" → DESTINATION_INQUIRY
 - "What are the best beaches in India?" → RECOMMENDATION
@@ -1859,6 +1865,8 @@ Classify as ONE of these:
 - "Best time to visit Ladakh?" → ADVICE
 - "What to pack for Manali?" → ADVICE
 - "Hello" / "Thanks" → GREETING
+
+{"CRITICAL: If there's previous extraction context, SHORT messages (1-5 words) are almost always TRIP_PLANNING follow-ups providing missing information!" if request.previous_extraction else ""}
 
 Respond with ONLY ONE WORD: TRIP_PLANNING, MODIFICATION_REQUEST, DESTINATION_INQUIRY, RECOMMENDATION, ADVICE, GREETING, or OTHER
 """
