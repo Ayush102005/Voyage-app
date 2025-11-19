@@ -47,6 +47,7 @@ class TripPlan(Base):
     
     # Generated content
     itinerary = Column(Text, nullable=False)  # The full AI-generated plan
+    chat_history = Column(Text, nullable=True)  # JSON string of chat history
     
     # Metadata
     is_budget_sufficient = Column(Boolean, default=True)

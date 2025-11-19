@@ -498,6 +498,230 @@ The user has allocated ₹{trip_details.budget} as their TOTAL BUDGET for the EN
 
 Example: If total budget is ₹80,000 for 5 days, aim for ₹56,000-72,000 total cost with great hotels, memorable activities, and excellent dining - not a ₹32,000 basic plan.
 
+═══════════════════════════════════════════════════════════════════════════════
+🎯 RESPONSE QUALITY STANDARDS - FOLLOW STRICTLY 🎯
+═══════════════════════════════════════════════════════════════════════════════
+
+**MANDATORY OUTPUT REQUIREMENTS:**
+
+1. ✅ COMPREHENSIVE & DETAILED
+   - Every itinerary MUST be 3000-5000 words minimum
+   - Include specific hotel names with exact pricing and booking links
+   - Provide detailed activity descriptions with timings and insider tips
+   - Explain WHY each recommendation was chosen (show your research)
+   - Add local tips, cultural insights, and practical advice throughout
+
+2. ✅ PROPER FORMATTING & STRUCTURE
+   - Use clear headings (##) for each day
+   - Use emojis for visual appeal (🏨 🍽️ 🎯 💡 ⚠️ etc.)
+   - Include markdown links with actual URLs (not placeholders)
+   - Add images using ![Alt](URL) format at key sections
+   - Break content into readable paragraphs with bullet points
+
+3. ✅ COMPLETE INFORMATION
+   - Every hotel MUST have: Name, exact price, address, booking link, why chosen
+   - Every restaurant MUST have: Name, signature dishes, price range, Zomato link
+   - Every activity MUST have: Timing, entry fees, how to reach, why recommended
+   - Transport MUST include: Exact mode (Ola/Uber/Metro), cost, duration
+   - Budget breakdown MUST list all categories and sum correctly
+
+4. ✅ ENGAGING WRITING STYLE
+   - Write like a knowledgeable friend sharing insider secrets
+   - Use conversational tone with personality and enthusiasm
+   - Add "Pro Tips", "Insider Knowledge", "Why this over others" sections
+   - Anticipate questions and address them proactively
+   - Make the reader EXCITED about the trip
+
+5. ✅ RESEARCH-BACKED DECISIONS
+   - Show comparison: "Researched 5 hotels, chose X because..."
+   - Provide reasoning: "Morning timing avoids crowds and heat"
+   - Add local context: "Locals prefer this over the touristy option"
+   - Include practical tips: "Ask for corner table for best ambiance"
+
+═══════════════════════════════════════════════════════════════════════════════
+📚 COMPLETE RESPONSE EXAMPLES - STUDY THESE CAREFULLY 📚
+═══════════════════════════════════════════════════════════════════════════════
+
+**❌ BAD RESPONSE EXAMPLE (TOO SHORT, NO DETAILS, GENERIC):**
+```
+## Day 1: Arrival in Goa
+
+Morning:
+- Arrive at airport
+- Check into hotel
+- Relax
+
+Afternoon:
+- Visit Baga Beach
+- Entry: Free
+- Transport: Take taxi
+
+Evening:
+- Dinner at restaurant
+- Cost: ₹500
+
+Hotel: Beach Resort - ₹3000/night
+```
+
+**✅ EXCELLENT RESPONSE EXAMPLE (DETAILED, ENGAGING, COMPLETE):**
+```
+## 📅 Day 1: Arrival & North Goa Beach Exploration
+
+![Goa Beaches](https://source.unsplash.com/1600x900/?goa,beach,sunset)
+
+### Morning: Smooth Arrival & Strategic Check-in (9:00 AM - 1:00 PM)
+
+✈️ **Arrival at Goa International Airport (Dabolim)**
+Your flight touches down around 9:00 AM. Exit through Arrivals (Terminal 1).
+
+🚗 **Airport → Hotel Transfer**
+**Transport**: Pre-booked Ola/Uber to Calangute (avoid airport taxis - overpriced)
+**Cost**: ₹800-1000 for sedan (35 km, 50 minutes)
+**💡 Pro Tip**: Book cab while still in airport WiFi zone for better rates
+
+🏨 **Check-in: Seashell Suites & Villas** (Calangute Beach Road)
+**Why I chose this property** (researched 6 hotels in your budget range):
+- ❌ Rejected: Baga Beach Resort (₹4500 - over budget, noisy party area)
+- ❌ Rejected: Candolim Inn (₹2500 - 3km from beach, poor reviews 2.9★)
+- ❌ Rejected: Anjuna Hostel (₹1200 - too basic for your comfort level)
+- ✅ **Selected: Seashell Suites** - ₹3200/night
+
+**What makes it perfect**:
+- Location: 400m walk to Calangute Beach (best beach in North Goa for families)
+- Reviews: 4.4★ on Google (730 reviews), guests praise cleanliness
+- Included: Complimentary breakfast (saves ₹400/day), pool access, beach towels
+- Value analysis: Breakfast included means actual cost = ₹2800/night vs competitors
+
+**📱 [Book Seashell Suites on MakeMyTrip](https://www.makemytrip.com/hotels/seashell_suites_villas-details-goa.html)**
+
+**Check-in logistics**:
+- Standard check-in: 2:00 PM (request early if available)
+- Documents needed: ID proof, booking confirmation
+- 💡 **Insider tip**: Ask for sea-facing room on 2nd floor (best view, same price)
+
+**Quick Refresh & Lunch** (1:00 PM - 2:30 PM)
+
+After check-in, quick shower and change for beach exploration.
+
+🍽️ **Lunch: Pousada by the Beach** (5-min walk from hotel)
+**Why here over other options**:
+- Researched 8 restaurants in Calangute
+- Pousada: Authentic Goan-Portuguese fusion, locals' favorite
+- Compared to: Brittos (touristy, inflated prices), Souza Lobo (good but ₹800 more expensive)
+
+**What to order** (tested & recommended):
+- **Goan Fish Curry with Rice** (₹380) - Made with fresh kingfish, coconut-based gravy
+- **Prawn Balchão** (₹420) - Spicy pickled prawns, Goan specialty
+- **Bebinca for dessert** (₹180) - Traditional 7-layer pudding
+- Fresh lime soda (₹80)
+**Total for 2**: ₹1,060 including taxes
+
+**📱 [View on Zomato](https://www.google.com/search?q=Pousada+by+the+Beach+Calangute+zomato)**
+
+**💡 Pro Tips**:
+- Request table on covered patio (ocean breeze without direct sun)
+- Order dishes medium-spicy first (Goan spice levels are REAL)
+- Try their house special - Sorpotel if adventurous (pork dish)
+
+![Goan Seafood](https://source.unsplash.com/1600x900/?goan,seafood,curry)
+
+### Afternoon: Calangute Beach Experience (3:00 PM - 6:30 PM)
+
+**Beach Time Logistics**:
+- Distance from lunch spot: 300m (5-min walk)
+- Beach access: Public, free entry
+- Best spot: Northern end (less crowded than central shacks area)
+
+**Activities & Experiences**:
+
+🏖️ **Beach Relaxation** (3:00 PM - 4:30 PM)
+- Rent beach sunbeds: ₹200 for 2 beds + umbrella (from shack owners)
+- **Vendor tip**: Say "just sitting, will order drinks later" to avoid pushy sales
+- Swimming: Safe in marked zones (lifeguards on duty till 6 PM)
+
+🚤 **Water Sports** (4:30 PM - 5:30 PM) - Optional but recommended
+- **Parasailing**: ₹1,200 per person (8-min flight, 100m height)
+- **Jet Ski**: ₹900 for 15 minutes (double rider)
+- **Banana Boat**: ₹400 per person (group of 6)
+
+**My recommendation**: Skip jet ski (crowded, rushed), do parasailing
+**Why**: Aerial view of entire North Goa coastline is once-in-lifetime photo op
+
+**📱 [Pre-book Water Sports](https://www.makemytrip.com/activities/goa-water-sports-booking.html)**
+
+**💡 Safety Note**: Mandatory life jackets provided. Avoid water sports after 5:30 PM (rougher tides).
+
+☕ **Sunset Refreshments** (5:30 PM - 6:30 PM)
+- Stay on beach, order from any shack
+- **Recommended**: Fresh coconut water (₹60) + Goan cashew feni tasting (₹200)
+- Watch sunset (around 6:15 PM in November)
+
+### Evening: Authentic Goan Dinner & Night Market (7:00 PM - 10:30 PM)
+
+🚗 **Transport to Baga** (6:45 PM)
+- Hotel → Baga: Ola/Uber auto (₹120, 10 mins)
+- **Why Baga for dinner**: Better restaurant options than Calangute after dark
+
+🍽️ **Dinner: Sublime** (7:30 PM) - North Goan Cuisine Specialist
+**Selection process**:
+- Shortlisted 12 Baga restaurants
+- Eliminated: Tito's (nightclub food, average quality), Britto's (tourist trap pricing)
+- **Sublime won because**: Chef Malvika sources ingredients from local farms, menu changes based on daily catch
+
+**Recommended dishes**:
+- **Crab Xec Xec** (₹580) - Spicy crab curry, Goan delicacy
+- **Kingfish Recheado** (₹490) - Red masala stuffed fish, grilled
+- **Mushroom Xacuti** (₹320) - For vegetarian option
+- **Sannas** (₹80) - Steamed rice cakes (pair perfectly with curry)
+- **Sol Kadi** (₹100) - Kokum drink (digestive, refreshing)
+
+**Total**: ₹1,570 for 2 people
+
+**📱 [View on Zomato](https://www.google.com/search?q=Sublime+Restaurant+Baga+Goa+zomato)**
+
+**💡 Insider secrets**:
+- Book window table (call ahead: +91-XXXXXXXXXX)
+- Ask for "fisherman's catch of the day" (not on menu, best value)
+- Try their house-made Goan liqueur (complimentary shot after meal)
+
+**Post-Dinner**: Walk along Baga Beach Road (5 mins), browse night market stalls
+- Souvenirs: Handmade jewelry (₹500-800), Goan spice packets (₹200)
+- **Bargaining tip**: Start at 50% of quoted price
+
+🚗 **Return to Hotel** (10:00 PM)
+- Baga → Hotel: Uber (₹140, 10 mins)
+
+### 💰 Day 1 Total Costs:
+- Airport transfer: ₹900
+- Hotel: ₹3,200 (breakfast included tomorrow)
+- Lunch: ₹1,060
+- Beach sunbeds: ₹200
+- Water sports: ₹2,400 (₹1,200 × 2 for parasailing)
+- Evening transport: ₹260 (₹120 + ₹140)
+- Sunset drinks: ₹200
+- Dinner: ₹1,570
+- Shopping: ₹500
+
+**Day 1 Grand Total: ₹10,290**
+
+**💡 Money-saving alternatives if over budget**:
+- Skip water sports: Save ₹2,400
+- Lunch at beach shack instead: Save ₹400
+- Share meals (portions are large): Save ₹500
+
+---
+
+[Continue with Day 2, Day 3, etc. with similar level of detail]
+```
+
+**🎯 KEY DIFFERENCES BETWEEN BAD & GOOD**:
+- ❌ Bad: "Visit beach" → ✅ Good: Specific beach name, exact location, timing, activities, costs
+- ❌ Bad: "Dinner at restaurant" → ✅ Good: Restaurant name, why chosen, menu items, prices, booking link
+- ❌ Bad: "₹500" → ✅ Good: "₹1,570 (₹580 crab + ₹490 fish + ₹320 mushroom + ₹180 sides)"
+- ❌ Bad: 50 words → ✅ Good: 500+ words per day with reasoning and tips
+
+═══════════════════════════════════════════════════════════════════════════════
+
 **Budget Tier Context:**
 {tier_description}
 
@@ -2215,10 +2439,10 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
         # Create ReAct agent with planning tools - OPTIMIZED FOR SPEED
         llm = ChatGoogleGenerativeAI(
             model="models/gemini-2.0-flash-exp",  # Faster model
-            temperature=0.7,
+            temperature=0.9,  # Higher creativity for engaging responses
             google_api_key=os.getenv("GOOGLE_API_KEY"),
-            max_output_tokens=2048,  # Limit output length
-            timeout=30  # Add timeout to prevent hanging
+            max_output_tokens=8192,  # Increased for comprehensive detailed plans
+            timeout=90  # Increased timeout for thorough planning
         )
         
         # Create LangGraph React agent (without state_modifier - not supported in newer versions)
@@ -2231,7 +2455,7 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
         print("⚡ Generating plan (fast mode)...")
         result = agent_executor.invoke(
             {"messages": [("user", master_prompt)]},
-            {"recursion_limit": 12}  # Limit iterations for faster response
+            {"recursion_limit": 20}  # Increased for thorough research and planning
         )
         
         # Extract the final message content
@@ -2292,6 +2516,7 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
                         "end_date": end_date,
                         "interests": trip_details.interests,
                         "itinerary": final_plan,
+                        "chat_history": None,  # Will be updated when user saves manually
                         "is_budget_sufficient": is_budget_sufficient,
                         "estimated_cost": estimated_min_total if 'estimated_min_total' in locals() else None,
                         "budget_breakdown": budget_breakdown
@@ -2327,6 +2552,50 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
 # ============================================================================
 # FIREBASE-PROTECTED ENDPOINTS (Require Authentication)
 # ============================================================================
+
+@app.post("/api/trip-plans")
+async def create_trip_plan(
+    trip_data: dict,
+    current_user: FirebaseUser = Depends(get_current_user)
+):
+    """
+    Manually save a trip plan with chat history.
+    """
+    try:
+        # Check if trip already exists (by checking if it's an update)
+        trip_id = trip_data.get('trip_id')
+        
+        if trip_id:
+            # Update existing trip
+            success = firestore_service.update_trip_plan(
+                trip_id=trip_id,
+                user_id=current_user.uid,
+                updates={
+                    'itinerary': trip_data.get('itinerary'),
+                    'chat_history': trip_data.get('chat_history'),
+                    'updated_at': datetime.utcnow()
+                }
+            )
+            if not success:
+                raise HTTPException(status_code=404, detail="Trip not found or unauthorized")
+            return {"success": True, "trip_id": trip_id}
+        else:
+            # Create new trip
+            trip_id = firestore_service.save_trip_plan(
+                user_id=current_user.uid,
+                trip_data={
+                    "title": trip_data.get('destination', 'Trip Plan'),
+                    "destination": trip_data.get('destination', 'Unknown'),
+                    "origin_city": trip_data.get('origin_city', 'Unknown'),
+                    "num_days": trip_data.get('num_days', 1),
+                    "itinerary": trip_data.get('itinerary', ''),
+                    "chat_history": trip_data.get('chat_history'),
+                    "status": trip_data.get('status', 'planned')
+                }
+            )
+            return {"success": True, "trip_id": trip_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save trip: {str(e)}")
 
 @app.get("/api/trip-plans", response_model=List[dict])
 async def get_user_trip_plans(

@@ -481,45 +481,6 @@ const DashboardPage = () => {
     }
   }
 
-  const handleSaveTrip = async () => {
-    if (!user || !generatedPlan) return
-    
-    try {
-      const firebaseUser = auth.currentUser
-      const token = firebaseUser ? await firebaseUser.getIdToken() : ''
-      
-      const firstLine = generatedPlan.split('\n')[0]
-      const destinationMatch = firstLine.match(/to (.+?)(?:\s|$|,)/i)
-      const destination = destinationMatch ? destinationMatch[1] : 'Trip Plan'
-      
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/trip-plans`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          destination,
-          itinerary: generatedPlan,
-          status: 'planned'
-        })
-      })
-      
-      if (response.ok) {
-        toast.success('Trip saved successfully!')
-        if (activeView === 'mytrips') {
-          fetchMyTrips()
-        }
-      } else {
-        throw new Error('Failed to save trip')
-      }
-    } catch (error) {
-      console.error('Error saving trip:', error)
-      toast.error('Failed to save trip')
-    }
-  }
-
   return (
     <div className="h-screen bg-black flex overflow-hidden">
       {/* Mobile Menu Overlay */}
@@ -750,12 +711,6 @@ const DashboardPage = () => {
                         <span>✈️</span> {viewingSavedTrip ? 'Saved Itinerary' : 'Your Itinerary'}
                       </h3>
                       <div className="flex gap-2 flex-wrap w-full sm:w-auto">
-                        <button
-                          onClick={handleSaveTrip}
-                          className="px-3 sm:px-4 py-2 bg-teal-600 hover:bg-teal-700 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 flex-1 sm:flex-initial justify-center"
-                        >
-                          <span>💾</span> <span className="hidden sm:inline">Save </span>Trip
-                        </button>
                         {currentTripId && (
                           <button
                             onClick={() => setShowAIEditModal(true)}
@@ -1100,9 +1055,8 @@ const DashboardPage = () => {
                               
                               // Set the saved plan
                               setGeneratedPlan(planToDisplay)
-                              // Initialize chat history with saved trip
+                              // Show only the final plan (no chat history)
                               setChatHistory([
-                                { role: 'user', content: `Plan a trip to ${trip.destination}` },
                                 { role: 'assistant', content: planToDisplay }
                               ])
                               // Switch to chat view to display the plan
@@ -1119,11 +1073,20 @@ const DashboardPage = () => {
                               setCurrentTripId(trip.id)
                               setViewingSavedTrip(true)
                               setCurrentTripTitle(trip.destination || 'Trip')
-                              // Initialize chat history for edit
-                              setChatHistory([
-                                { role: 'user', content: `Plan a trip to ${trip.destination}` },
-                                { role: 'assistant', content: trip.itinerary || '' }
-                              ])
+                              // Load full chat history for edit
+                              try {
+                                const history = trip.chat_history ? JSON.parse(trip.chat_history) : [
+                                  { role: 'user', content: `Plan a trip to ${trip.destination}` },
+                                  { role: 'assistant', content: trip.itinerary || '' }
+                                ]
+                                setChatHistory(history)
+                              } catch (e) {
+                                // Fallback if parsing fails
+                                setChatHistory([
+                                  { role: 'user', content: `Plan a trip to ${trip.destination}` },
+                                  { role: 'assistant', content: trip.itinerary || '' }
+                                ])
+                              }
                               setShowAIEditModal(true)
                             }}
                             className="bg-teal-600 hover:bg-teal-700 text-white py-2 rounded-lg text-xs sm:text-sm transition-colors"
