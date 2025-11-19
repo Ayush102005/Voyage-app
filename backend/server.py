@@ -2063,19 +2063,28 @@ This way I can create an upgraded plan that fully utilizes your budget! 💎""",
 
 **IMPORTANT - CONVERSATION CONTINUITY:**
 The user previously provided some trip information but it was incomplete. Here's what we already know:
-- Origin: {previous_details.get('origin_city', 'Not specified')}
-- Destination: {previous_details.get('destination', 'Not specified')}
-- Days: {previous_details.get('num_days', 0)}
-- People: {previous_details.get('num_people', 1)}
-- Budget: ₹{previous_details.get('budget', 0)}
+- Origin: {previous_details.get('origin_city', 'Not specified')} {'❌ MISSING - Need to ask' if not previous_details.get('origin_city') or previous_details.get('origin_city') in ['Not specified', 'unknown', 'n/a'] else '✓ Already provided'}
+- Destination: {previous_details.get('destination', 'Not specified')} {'❌ MISSING - Need to ask' if not previous_details.get('destination') or previous_details.get('destination') in ['Not specified', 'unknown', 'n/a'] else '✓ Already provided'}
+- Days: {previous_details.get('num_days', 0)} {'❌ MISSING - Need to ask' if not previous_details.get('num_days') or previous_details.get('num_days') <= 0 else '✓ Already provided'}
+- People: {previous_details.get('num_people', 1)} {'✓ Already provided' if previous_details.get('num_people') and previous_details.get('num_people') > 0 else '(default)'}
+- Budget: ₹{previous_details.get('budget', 0)} {'❌ MISSING - Need to ask' if not previous_details.get('budget') or previous_details.get('budget') <= 0 else '✓ Already provided'}
+- Start Date: {previous_details.get('start_date', 'Not specified')} {'❌ MISSING - Need to ask' if not previous_details.get('start_date') else '✓ Already provided'}
 - Interests: {previous_details.get('interests', 'None specified')}
 
-The user's new message "{request.prompt}" is providing ADDITIONAL information. You should:
-1. Extract any NEW details from this message
-2. Keep the EXISTING details that were already provided
-3. Only update fields that are explicitly mentioned in the new message
+**WHAT WE ASKED THE USER:**
+We just asked them to provide the MISSING information above (marked with ❌).
 
-For example, if the user already said destination is "Paris" but now says "from Mumbai", keep destination="Paris" and update origin_city="Mumbai".
+The user's new message "{request.prompt}" is their ANSWER to what we asked for.
+
+**YOUR TASK:**
+1. If the message is a SINGLE WORD or SHORT PHRASE (like "Mumbai", "Delhi", "5 days", "50000"), it's answering the FIRST MISSING FIELD above
+2. Extract ONLY the new information from their answer
+3. Keep ALL existing ✓ values COMPLETELY UNCHANGED
+4. DO NOT interpret their answer as a new trip request - it's filling in missing data!
+
+**Example:** If Origin is ❌ MISSING and Destination is "Rajasthan" ✓, and user says "Mumbai":
+→ Set origin_city="Mumbai", keep destination="Rajasthan" (NOT a Mumbai trip!)
+
 """
         
         extractor_llm = ChatGoogleGenerativeAI(
@@ -2097,11 +2106,19 @@ USER MESSAGE: "{request.prompt}"
 Be smart and conversational in understanding:
 
 {"**SPECIAL RULE FOR FOLLOW-UP MESSAGES:**" if request.previous_extraction else ""}
-{"If the user's message is SHORT (1-5 words) or provides ONLY ONE piece of information (like 'from Mumbai', '5 days', '50000 rupees'), it means they are ANSWERING a specific question we asked. In this case:" if request.previous_extraction else ""}
-{"- Extract ONLY the new information provided" if request.previous_extraction else ""}
-{"- Keep ALL existing values unchanged" if request.previous_extraction else ""}
-{"- DO NOT set anything to 'Not specified' or 0 if it was already provided" if request.previous_extraction else ""}
-{"- Example: User already said 'Goa trip' (destination=Goa), now says 'from Mumbai' → Keep destination='Goa', update origin_city='Mumbai'" if request.previous_extraction else ""}
+{"When the user's message is SHORT (1-5 words like 'Mumbai', '5 days', '30000'), they're answering what we asked for:" if request.previous_extraction else ""}
+{""  if request.previous_extraction else ""}
+{"**Field Matching Rules:**" if request.previous_extraction else ""}
+{"1. Single city/location name (e.g., 'mumbai', 'Delhi') → Fill the FIRST MISSING location field" if request.previous_extraction else ""}
+{"   - If origin_city is ❌ MISSING in the context above → Set origin_city, keep destination unchanged" if request.previous_extraction else ""}
+{"   - If origin_city is ✓ provided but destination is ❌ MISSING → Set destination, keep origin_city unchanged" if request.previous_extraction else ""}
+{"2. Number with 'days' (e.g., '5 days', '1 week') → Set num_days" if request.previous_extraction else ""}
+{"3. Number alone or with rupees/₹ (e.g., '50000', '30k rupees') → Set budget" if request.previous_extraction else ""}
+{"4. Date (e.g., '25 December', '2024-12-25') → Set start_date" if request.previous_extraction else ""}
+{""  if request.previous_extraction else ""}
+{"DO NOT CREATE A NEW TRIP ABOUT THAT CITY! Extract the specific field that's missing." if request.previous_extraction else ""}
+{""  if request.previous_extraction else ""}
+{"Example: Previous has origin_city='Not specified', destination='Rajasthan'. User says 'mumbai' → Set origin_city='Mumbai', keep destination='Rajasthan' (NOT a Mumbai trip!)" if request.previous_extraction else ""}
 {""  if request.previous_extraction else ""}
 
 1. **Origin City**: Where they're traveling FROM
