@@ -133,7 +133,7 @@ const HomePage = () => {
           
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {[
-              { emoji: "🗺️", title: "Tell Us Your Dream", desc: "Share your destination, budget, dates, and interests" },
+              { emoji: "🗺️", title: "Tell Us Your Dream Destination", desc: "Share your destination, budget, dates, and interests" },
               { emoji: "✨", title: "AI Crafts Your Plan", desc: "Our intelligent system creates a personalized itinerary" },
               { emoji: "📅", title: "Enjoy Your Journey", desc: "Get a complete day-by-day plan with bookings and insights" }
             ].map((step, i) => (
