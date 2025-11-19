@@ -2907,26 +2907,75 @@ FORMAT YOUR RESPONSE:
 
 [Clearly explain what you understood from "{user_feedback}" and what specific changes you made]
 
+---
+
 ## 📋 Your Replanned {duration}-Day Itinerary for {destination}
 
-**Day 1: [Title]**
-- Morning: ...
-- Afternoon: ...
-- Evening: ...
-- Accommodation: [Name with booking link]
+### 📅 Day 1: [Title]
+
+**Morning (8:00 AM - 12:00 PM)**
+- [Activity details with timing]
+- 🚗 Transport: [Mode and cost]
+- 💰 Cost: ₹[amount]
+
+**Afternoon (12:00 PM - 5:00 PM)**
+- [Activity details]
+- 🍽️ Lunch: [Restaurant name and details]
+- 💰 Cost: ₹[amount]
+
+**Evening (5:00 PM - 10:00 PM)**
+- [Activity details]
+- 🍽️ Dinner: [Restaurant name and details]
+- 💰 Cost: ₹[amount]
+
+**🏨 Accommodation:** [Hotel Name](booking_link)
+- Why chosen: [Brief explanation]
+- Cost: ₹[amount]/night
+
+---
+
+### 📅 Day 2: [Title]
+
+[Same detailed format as Day 1]
+
+---
 
 [Continue for all days]
 
+---
+
 ## 💰 Updated Budget Breakdown
 
-| Item | Cost |
-|------|------|
-| ... | ... |
-| **Grand Total** | **₹...** |
+**Total Trip Cost: ₹[GRAND_TOTAL]**
+
+| Category | Details | Cost (₹) |
+|----------|---------|----------|
+| 🏨 Accommodation | [Hotel Name] × [nights] nights | [amount] |
+| ✈️ Transportation | [Flights/trains/local travel] | [amount] |
+| 🍽️ Food | All meals for {duration} days | [amount] |
+| 🎫 Activities | Entry fees, tours, experiences | [amount] |
+| 🚗 Local Transport | Cabs, autos, metros | [amount] |
+| 🛍️ Shopping & Misc | Souvenirs, tips, extras | [amount] |
+| **GRAND TOTAL** | | **₹[amount]** |
+
+---
 
 ## ✅ Why This New Plan Works Better
 
-[Explain how this addresses "{user_feedback}"]
+**Key Improvements:**
+- ✓ [Improvement 1 directly addressing feedback]
+- ✓ [Improvement 2 directly addressing feedback]
+- ✓ [Improvement 3 directly addressing feedback]
+
+**What Changed:**
+- **Before:** [What it was like]
+- **Now:** [How it's better based on feedback]
+
+[Explain in detail how this addresses "{user_feedback}"]
+
+---
+
+💡 **Ready to start?** Your updated itinerary is all set! Let me know if you'd like any more adjustments.
 
 IMPORTANT: Make SUBSTANTIAL changes that directly address "{user_feedback}". Don't just tweak minor details!"""
         )
