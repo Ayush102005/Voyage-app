@@ -2196,8 +2196,15 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
                 if new_budget > old_budget:
                     print(f"  💰 BUDGET INCREASED: {old_budget} → {new_budget}")
                     print(f"  🔄 Will re-check if new budget is sufficient for ORIGINAL destination")
+                    
+                    # Check if there's an original_destination stored (from insufficient budget scenario)
+                    if request.previous_extraction.get('original_destination'):
+                        original_dest = request.previous_extraction.get('original_destination')
+                        print(f"  🎯 RESTORING ORIGINAL DESTINATION: {original_dest}")
+                        print(f"     (Previous suggested alternative was: {trip_details.destination})")
+                        trip_details.destination = original_dest
+                    
                     # Budget increased - we'll use the new budget and re-validate
-                    # The destination from previous extraction should be preserved
                 else:
                     print(f"  💰 Budget changed: {old_budget} → {new_budget}")
             
@@ -2585,7 +2592,12 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
             message="Trip plan generated successfully and saved!",
             trip_plan=final_plan,
             trip_id=trip_id,
-            extracted_details=trip_details.model_dump(),
+            extracted_details={
+                **trip_details.model_dump(),
+                # Store original destination if budget was insufficient
+                'original_destination': trip_details.destination if not is_budget_sufficient else None,
+                'was_budget_insufficient': not is_budget_sufficient
+            },
             research_data=research_data
         )
         
