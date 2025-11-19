@@ -1552,7 +1552,19 @@ Hey friend! 👋 I've looked at your travel plans, and I've got some good news a
 Your destination choice is AMAZING! {trip_details.destination} is incredible!
 
 **The Even Better News:**
-While your TOTAL budget of ₹{trip_details.budget} for the entire trip is about ₹{shortfall} short for the original {trip_details.num_days}-day plan, I'm going to create an AWESOME adjusted itinerary that works perfectly within your budget AND gives you an authentic, unforgettable experience!
+While your TOTAL budget of ₹{trip_details.budget} for the entire trip is about ₹{shortfall} short for the original {trip_details.num_days}-day plan, I'm going to help you make this trip happen!
+
+**🚨 CRITICAL INSTRUCTION - READ CAREFULLY:**
+The user's original destination was **{trip_details.destination}** but their budget was insufficient by ₹{shortfall}.
+
+**IF THE USER NOW MENTIONS THEY CAN INCREASE THEIR BUDGET:**
+1. **FIRST** check if the new increased budget is now sufficient for **{trip_details.destination}** (their original choice)
+2. Calculate: Does (new budget) >= (original estimated cost)?
+3. **IF YES**: Generate a FULL detailed plan for **{trip_details.destination}** (NOT alternate destinations!)
+4. **IF NO**: Then proceed with alternate destination suggestions below
+
+**IF THE USER DOES NOT MENTION BUDGET INCREASE:**
+Proceed with the options below.
 
 **IMPORTANT LANGUAGE INSTRUCTION:**
 Generate the ENTIRE adjusted plan response in {trip_details.preferred_language or 'English'}. If the language is Hindi, Tamil, Telugu, Bengali, Marathi, or any other Indian language, translate ALL headings, descriptions, and explanations into that language.
@@ -1618,16 +1630,26 @@ This ensures the adjusted plan truly fits within ₹{trip_details.budget}
 
 **OUTPUT FORMAT:**
 ```
-💡 TRAVEL OPTIONS FOR YOUR {trip_details.destination} TRIP
+💡 YOUR {trip_details.destination} TRIP - BUDGET OPTIONS
 
 ⚠️ BUDGET REALITY CHECK
 Your requested budget of ₹{trip_details.budget} for {trip_details.num_days} days is approximately ₹{shortfall} short of what's typically needed for {trip_details.destination}.
 
+**🎯 REMEMBER: The user's FIRST CHOICE was {trip_details.destination}!**
+
+**If they say they can increase their budget:** 
+→ Calculate if new budget is sufficient for {trip_details.destination}
+→ If YES: Create full plan for {trip_details.destination} (don't suggest alternatives!)
+→ If NO: Then suggest alternatives
+
 But don't worry! Here are THREE great options to make your trip happen:
 
 ═══════════════════════════════════════
-🌟 OPTION 1: INCREASE BUDGET (RECOMMENDED)
+🌟 OPTION 1: INCREASE BUDGET TO ₹{trip_details.budget + shortfall} (RECOMMENDED FOR {trip_details.destination.upper()})
 ═══════════════════════════════════════
+**This lets you enjoy {trip_details.destination} properly!**
+
+With ₹{trip_details.budget + shortfall} total budget, you can have:
 
 **Recommended Total Budget: ₹{trip_details.budget + shortfall}**
 (Your current: ₹{trip_details.budget} + Additional needed: ₹{shortfall})
@@ -2163,8 +2185,21 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
                 print(f"  ✓ Kept num_people: {trip_details.num_people}")
             
             if (not trip_details.budget or trip_details.budget <= 0) and request.previous_extraction.get('budget'):
-                trip_details.budget = request.previous_extraction.get('budget')
+                # OLD budget from previous extraction
+                old_budget = request.previous_extraction.get('budget')
+                trip_details.budget = old_budget
                 print(f"  ✓ Kept budget: {trip_details.budget}")
+            elif trip_details.budget and trip_details.budget > 0 and request.previous_extraction.get('budget'):
+                # NEW budget provided - this is a budget UPDATE scenario
+                old_budget = request.previous_extraction.get('budget')
+                new_budget = trip_details.budget
+                if new_budget > old_budget:
+                    print(f"  💰 BUDGET INCREASED: {old_budget} → {new_budget}")
+                    print(f"  🔄 Will re-check if new budget is sufficient for ORIGINAL destination")
+                    # Budget increased - we'll use the new budget and re-validate
+                    # The destination from previous extraction should be preserved
+                else:
+                    print(f"  💰 Budget changed: {old_budget} → {new_budget}")
             
             if not trip_details.interests and request.previous_extraction.get('interests'):
                 trip_details.interests = request.previous_extraction.get('interests')
@@ -2279,6 +2314,18 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
         # STEP 3: VALIDATE BUDGET & CLASSIFY TIER (Dynamic Feasibility Check)
         # ====================================================================
         print("\n💰 STEP 3: Dynamic Feasibility Check - Validating budget sufficiency...")
+        
+        # Check if this is a budget update scenario
+        budget_was_increased = False
+        if request.previous_extraction and request.previous_extraction.get('budget'):
+            old_budget = request.previous_extraction.get('budget')
+            if trip_details.budget > old_budget:
+                budget_was_increased = True
+                print(f"\n💰 BUDGET UPDATE DETECTED!")
+                print(f"   Old budget: ₹{old_budget}")
+                print(f"   New budget: ₹{trip_details.budget}")
+                print(f"   Increase: ₹{trip_details.budget - old_budget}")
+                print(f"   🎯 Re-validating for ORIGINAL destination: {trip_details.destination}")
         
         # Extract minimum daily budget from research data using the enhanced tool output
         try:
