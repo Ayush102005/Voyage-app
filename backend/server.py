@@ -2859,6 +2859,40 @@ Provide your analysis in a structured way."""
         feedback_analysis = llm.invoke(interpretation_prompt).content
         print(f"📝 Feedback Analysis:\n{feedback_analysis}\n")
         
+        # STEP 2: Budget Impact Analysis
+        print("💰 Analyzing budget impact of requested changes...")
+        budget_check_prompt = f"""Analyze if the user's requested changes are feasible within their budget.
+
+ORIGINAL TRIP:
+- Destination: {destination}
+- Duration: {duration} days
+- People: {num_people}
+- Current Budget: ₹{budget}
+
+USER'S FEEDBACK: "{user_feedback}"
+
+FEEDBACK ANALYSIS: {feedback_analysis}
+
+Determine:
+1. Does the feedback request MORE expensive options? (luxury, 5-star, premium, fine dining, etc.)
+2. Does the feedback request LESS expensive options? (budget, cheap, economical, etc.)
+3. Estimate the new total cost based on the requested changes
+4. Is it feasible within the budget of ₹{budget}?
+
+Respond in this format:
+CHANGE_TYPE: [UPGRADE/DOWNGRADE/SAME_LEVEL]
+ESTIMATED_NEW_COST: ₹[amount]
+FEASIBLE: [YES/NO]
+REASON: [Brief explanation]
+RECOMMENDATION: [What should be done - proceed, suggest budget increase, or alternative]"""
+
+        budget_analysis = llm.invoke(budget_check_prompt).content
+        print(f"💵 Budget Impact Analysis:\n{budget_analysis}\n")
+        
+        # Extract feasibility from analysis
+        is_feasible = "FEASIBLE: YES" in budget_analysis.upper() or "FEASIBLE:YES" in budget_analysis.upper()
+        needs_budget_increase = "FEASIBLE: NO" in budget_analysis.upper() or "FEASIBLE:NO" in budget_analysis.upper()
+        
         # Create replanning-specific agent with enhanced understanding
         agent = create_react_agent(
             llm,
@@ -2881,6 +2915,15 @@ USER'S FEEDBACK: "{user_feedback}"
 
 FEEDBACK ANALYSIS:
 {feedback_analysis}
+
+BUDGET IMPACT ANALYSIS:
+{budget_analysis}
+
+⚠️ BUDGET CONSTRAINT: The user's TOTAL budget is ₹{budget} for the ENTIRE trip.
+{"🚨 CRITICAL: Budget analysis shows the requested changes MAY EXCEED the budget! You MUST either:" if needs_budget_increase else "✅ Budget should be sufficient for requested changes."}
+{"   1. Find creative ways to accommodate changes within ₹" + str(budget) if needs_budget_increase else ""}
+{"   2. Clearly explain the budget shortfall and suggest increasing budget" if needs_budget_increase else ""}
+{"   3. Offer a hybrid approach (some upgrades + some budget options)" if needs_budget_increase else ""}
 
 YOUR MISSION:
 1. **UNDERSTAND THE FEEDBACK**: Read what the user wants carefully. Common requests:
@@ -2907,7 +2950,32 @@ FORMAT YOUR RESPONSE:
 
 [Clearly explain what you understood from "{user_feedback}" and what specific changes you made]
 
+{"⚠️ **BUDGET NOTICE:** The changes you requested (luxury/5-star/premium options) typically cost more than your current budget of ₹" + str(budget) + ". I've created two options for you:" if needs_budget_increase else ""}
+
 ---
+
+{"## 💰 BUDGET REALITY CHECK" if needs_budget_increase else ""}
+{"" if not needs_budget_increase else f"""
+Your requested changes would typically cost: ₹[ESTIMATED_COST]
+Your current budget: ₹{budget}
+Shortfall: ₹[DIFFERENCE]
+
+**I'm giving you THREE OPTIONS:**
+
+### Option 1: Stay Within Budget (₹{budget})
+[Create a plan that incorporates SOME of their requests but keeps it within budget]
+- Example: Instead of 5-star throughout, mix one night at 5-star with other nights at 4-star
+- Example: Fine dining for 1-2 meals, regular restaurants for others
+
+### Option 2: Increase Budget to ₹[RECOMMENDED_AMOUNT]
+[Show what they get with the increased budget - full luxury experience as requested]
+
+### Option 3: Hybrid Approach
+[Mix of luxury and regular - strategic splurges]
+
+**Which option would you prefer?** Just let me know!
+
+---"""}
 
 ## 🔗 BOOKING LINKS
 
