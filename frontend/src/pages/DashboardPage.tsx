@@ -300,6 +300,13 @@ const DashboardPage = () => {
         previous_extraction: previousExtraction
       }
 
+      // Log for debugging conversation continuity
+      console.log('📤 Sending to backend:', {
+        prompt,
+        has_previous_extraction: !!previousExtraction,
+        previous_extraction: previousExtraction
+      })
+
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
       const response = await fetch(`${apiUrl}/api/plan-trip-from-prompt`, {
         method: 'POST',
@@ -316,11 +323,18 @@ const DashboardPage = () => {
 
       const data = await response.json()
 
+      console.log('📥 Response from backend:', {
+        success: data.success,
+        message: data.message,
+        has_extracted_details: !!data.extracted_details
+      })
+
       if (data.success) {
         setGeneratedPlan(data.trip_plan)
         // Add AI response to chat history
         setChatHistory(prev => [...prev, { role: 'assistant', content: data.trip_plan }])
         toast.success('Trip plan generated!')
+        // Clear previous extraction only after successful plan generation
         setPreviousExtraction(null)
         setInput('')
       } else if (data.message === 'Need more information') {
@@ -328,7 +342,9 @@ const DashboardPage = () => {
         // Add AI response to chat history for follow-up questions
         setChatHistory(prev => [...prev, { role: 'assistant', content: data.trip_plan }])
         toast('Please provide more details', { icon: '💬' })
+        // Keep the extraction details for next message
         setPreviousExtraction(data.extracted_details)
+        console.log('💾 Stored previous extraction for follow-up:', data.extracted_details)
         setInput('')
       } else {
         throw new Error(data.message || 'Failed to generate plan')
