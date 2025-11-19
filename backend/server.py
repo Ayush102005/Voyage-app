@@ -468,10 +468,19 @@ From: {trip_details.origin_city} (India)
 To: {trip_details.destination}
 Duration: {trip_details.num_days} days
 Start Date: {trip_details.start_date if trip_details.start_date else 'Not specified - use reasonable future date'}
+End Date: {trip_details.start_date if trip_details.start_date else 'start date'} + {trip_details.num_days} days (for return flight/checkout)
 Travelers: {trip_details.num_people} Indian {people_text}
 Budget: ₹{trip_details.budget} TOTAL for the ENTIRE {trip_details.num_days}-day trip ({budget_tier} tier - {tier_description})
 Interests: {trip_details.interests or 'General exploration'}
 Language: {trip_details.preferred_language or 'English'}
+
+📅 **DATE REFERENCE FOR ALL BOOKINGS:**
+✓ Outbound Flight Date: {trip_details.start_date if trip_details.start_date else '[calculate]'} → Convert to DD/MM/YYYY format
+✓ Hotel Check-in: {trip_details.start_date if trip_details.start_date else '[start date]'}
+✓ Hotel Check-out: {trip_details.start_date if trip_details.start_date else '[start date]'} + {trip_details.num_days} days
+✓ Return Flight Date: {trip_details.start_date if trip_details.start_date else '[start date]'} + {trip_details.num_days} days → Convert to DD/MM/YYYY
+✓ ALWAYS calculate return date correctly: If trip starts Dec 15 for 5 days, return is Dec 20 (NOT Dec 2!)
+
 
 ⚠️⚠️⚠️ CRITICAL BUDGET INSTRUCTION ⚠️⚠️⚠️
 The budget of ₹{trip_details.budget} is the TOTAL AMOUNT for the COMPLETE {trip_details.num_days}-day trip.
@@ -1074,17 +1083,26 @@ Your plans should read like a knowledgeable friend sharing insider tips, NOT a r
 
 For EVERY hotel/accommodation you recommend:
 ✓ Use the get_booking_link tool to get the official booking website
-✓ Format: [Hotel Name](booking URL) - Brief description
+✓ **Include check-in/check-out dates**: Check-in = {trip_details.start_date if trip_details.start_date else 'trip start'}, Check-out = trip start + {trip_details.num_days} days
+✓ Format: [Hotel Name](booking URL) - Brief description with dates
+✓ Example: "Book at [Hotel Name] (Check-in: 15/12/2025, Check-out: 20/12/2025)"
 
 For flights:
 ✓ Provide MakeMyTrip URLs with pre-filled search using ACTUAL trip dates
 ✓ Format: https://www.makemytrip.com/flight/search?itinerary=ORIGIN-DESTINATION-DD/MM/YYYY&tripType=O&paxType=A-X_C-0_I-0&intl=false&cabinClass=E&lang=eng
-✓ **CRITICAL**: Use the trip start date ({trip_details.start_date if trip_details.start_date else 'calculate from today + 30 days'}) for outbound flight
-✓ **CRITICAL**: Calculate return date by adding {trip_details.num_days} days to start date for return flight
+✓ **CRITICAL DATE CALCULATION**:
+  - Trip Start Date: {trip_details.start_date if trip_details.start_date else 'today + 30 days'}
+  - Trip End Date (for return flight): Start date + {trip_details.num_days} days
+  - If start is 2025-12-15 and trip is 5 days: return is 2025-12-20 → use 20/12/2025
+  - If start is 2025-12-02 and trip is 7 days: return is 2025-12-09 → use 09/12/2025
+✓ **OUTBOUND FLIGHT**: Use START date in DD/MM/YYYY format
+✓ **RETURN FLIGHT**: Use (START date + {trip_details.num_days} days) in DD/MM/YYYY format
 ✓ Date format: DD/MM/YYYY (e.g., 15/12/2025 for Dec 15, 2025)
 ✓ Update paxType based on travelers: A-{trip_details.num_people}_C-0_I-0 for {trip_details.num_people} adults
-✓ Example: If trip starts 2025-12-15, use https://www.makemytrip.com/flight/search?itinerary=BOM-GOI-15/12/2025&tripType=O&paxType=A-{trip_details.num_people}_C-0_I-0&intl=false&cabinClass=E&lang=eng
-✓ **DO NOT use placeholder dates like 06/11/2025 - use ACTUAL trip dates!**
+✓ Example: If trip starts 2025-12-15 for 5 days:
+  - Outbound: https://www.makemytrip.com/flight/search?itinerary=BOM-GOI-15/12/2025&tripType=O&paxType=A-{trip_details.num_people}_C-0_I-0&intl=false&cabinClass=E&lang=eng
+  - Return: https://www.makemytrip.com/flight/search?itinerary=GOI-BOM-20/12/2025&tripType=O&paxType=A-{trip_details.num_people}_C-0_I-0&intl=false&cabinClass=E&lang=eng
+✓ **DO NOT use wrong dates like 02/12 for return when trip starts 15/12 - calculate correctly!**
 
 For trains:
 ✓ Provide IRCTC booking links
