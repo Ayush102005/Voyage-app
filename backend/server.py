@@ -2944,7 +2944,290 @@ YOUR MISSION:
 
 4. **EXPLAIN YOUR CHANGES**: Show what you changed and why it addresses their concern
 
-FORMAT YOUR RESPONSE:
+5. **CRITICAL FORMATTING RULES:**
+   - Use proper markdown with ## for main headings, ### for subheadings
+   - Use **bold** for emphasis and important information
+   - Use bullet points (- or •) consistently with proper indentation
+   - ALL links must be in format: **📱 [Link Text](actual-url)** - NO plain text URLs!
+   - Use emojis consistently (🏨 🍽️ 🚗 ✈️ 💰 📱 etc.)
+   - Add line breaks between sections for readability
+   - Use tables with proper | formatting for budget breakdown
+   - Each day must have clear time sections: Morning/Afternoon/Evening
+   - Every restaurant MUST have Zomato link: **📱 [View on Zomato](https://www.google.com/search?q=Restaurant+Name+City+zomato)**
+   - Every hotel MUST have booking link: **📱 [Book Hotel Name](actual-url-from-tool)**
+   - Flight links MUST use MakeMyTrip format with actual dates
+
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
+
+## 🔄 What I Changed Based on Your Feedback
+
+**Understanding Your Request:**
+- [Point 1 about what they wanted]
+- [Point 2 about specific changes]
+- [Point 3 about their concerns]
+
+**Changes Made:**
+- ✅ [Change 1 with specifics]
+- ✅ [Change 2 with specifics]
+- ✅ [Change 3 with specifics]
+
+{"⚠️ **BUDGET NOTICE:** The changes you requested (luxury/5-star/premium options) typically cost more than your current budget of ₹" + str(budget) + ". I've created options for you below." if needs_budget_increase else ""}
+
+---
+
+{"## 💰 BUDGET REALITY CHECK" if needs_budget_increase else ""}
+{"" if not needs_budget_increase else f"""
+
+**Current Situation:**
+- Your requested changes: ₹[ESTIMATED_COST]
+- Your current budget: ₹{budget}
+- Additional needed: ₹[DIFFERENCE]
+
+**I'm giving you THREE OPTIONS:**
+
+### 🎯 Option 1: Stay Within Budget (₹{budget})
+
+**What You Get:**
+- [Specific accommodation option]
+- [Specific food/dining option]
+- [Specific activities included]
+
+**Trade-offs:**
+- ❌ [What you won't get compared to luxury]
+- ✅ [What you still get that's good]
+
+---
+
+### 🌟 Option 2: Increase Budget to ₹[RECOMMENDED_AMOUNT]
+
+**Full Luxury Experience:**
+- [Luxury accommodation details]
+- [Fine dining options]
+- [Premium activities]
+
+**Why It's Worth It:**
+- [Benefit 1]
+- [Benefit 2]
+
+---
+
+### ⚖️ Option 3: Hybrid Approach (₹[MIDDLE_AMOUNT])
+
+**Best of Both Worlds:**
+- [Mix of luxury and standard]
+- [Strategic splurges]
+- [Where we save, where we splurge]
+
+---
+
+**Which option would you prefer?** Just let me know and I'll create the detailed itinerary!
+
+---"""}
+
+## 🔗 BOOKING LINKS
+
+### ✈️ Flights
+
+**Outbound:**
+- **📱 [Book Flight: [Origin] → {destination}](https://www.makemytrip.com/flight/search?itinerary=ORIGIN-DESTINATION-DD/MM/YYYY&tripType=O&paxType=A-{num_people}_C-0_I-0&intl=false&cabinClass=E&lang=eng)**
+- Departure: [Date]
+- Estimated: ₹[amount] per person
+
+**Return:**
+- **📱 [Book Return Flight: {destination} → [Origin]](https://www.makemytrip.com/flight/search?itinerary=DESTINATION-ORIGIN-DD/MM/YYYY&tripType=O&paxType=A-{num_people}_C-0_I-0&intl=false&cabinClass=E&lang=eng)**
+- Departure: [Date]
+- Estimated: ₹[amount] per person
+
+### 🏨 Hotels
+
+**📱 [Book [Hotel Name]](actual_booking_link_from_get_booking_link_tool)**
+- Location: [Area name]
+- {duration} nights
+- Total: ₹[amount]
+
+---
+
+## 📋 Your Replanned {duration}-Day Itinerary for {destination}
+
+### 📅 Day 1: [Descriptive Title]
+
+**Morning (8:00 AM - 12:00 PM)**
+
+**Activities:**
+- 🏛️ [Activity name with specific details]
+- 📸 [Photo spot or viewpoint]
+- ⏰ Duration: [X hours]
+
+**Transport:**
+- 🚗 Mode: [Ola/Uber/Metro/Auto]
+- 💰 Cost: ₹[amount]
+- ⏱️ Time: [X minutes]
+- **💡 Tip:** [Practical advice]
+
+---
+
+**Afternoon (12:00 PM - 5:00 PM)**
+
+**Lunch:**
+- 🍽️ **Restaurant:** [Full Restaurant Name]
+- **📱 [View on Zomato](https://www.google.com/search?q=Restaurant+Name+City+zomato)**
+- **Cuisine:** [Type]
+- **Recommended Dishes:**
+  • [Dish 1] - ₹[price]
+  • [Dish 2] - ₹[price]
+  • [Dish 3] - ₹[price]
+- **Total:** ₹[amount] for {num_people} person(s)
+- **💡 Insider Tip:** [Reservation advice, best time, special note]
+
+**Activities:**
+- [Afternoon activity details]
+- 💰 Entry: ₹[amount]
+
+---
+
+**Evening (5:00 PM - 10:00 PM)**
+
+**Dinner:**
+- 🍽️ **Restaurant:** [Full Restaurant Name]
+- **📱 [View on Zomato](https://www.google.com/search?q=Restaurant+Name+City+zomato)**
+- **Cuisine:** [Type]
+- **Specialties:**
+  • [Signature dish 1] - ₹[price]
+  • [Signature dish 2] - ₹[price]
+- **Total:** ₹[amount]
+- **💡 Pro Tip:** [Best time to visit, reservation needed, etc.]
+
+---
+
+**🏨 Accommodation: [Hotel Name]**
+
+**Details:**
+- **📱 [Book Now](actual_booking_url_from_get_booking_link_tool)**
+- ⭐ Rating: [X.X/5]
+- 📍 Location: [Specific area]
+- 💰 Cost: ₹[amount]/night
+
+**Why This Hotel:**
+- ✅ [Reason 1]
+- ✅ [Reason 2]
+- ✅ [Reason 3]
+
+---
+
+### 📅 Day 2: [Title]
+
+[Same detailed format as Day 1]
+
+---
+
+## 💰 Updated Budget Breakdown
+
+**Grand Total: ₹[TOTAL] out of ₹{budget} budget**
+
+| Category | Item Details | Cost (₹) |
+|----------|--------------|----------|
+| ✈️ **Flights** | Round-trip tickets × {num_people} person(s) | [amount] |
+| 🏨 **Accommodation** | [Hotel] × {duration} nights | [amount] |
+| 🍽️ **Food** | Breakfast + Lunch + Dinner × {duration} days | [amount] |
+| 🎫 **Activities** | Entry fees + Tours + Experiences | [amount] |
+| 🚗 **Local Transport** | Cabs + Autos + Metro | [amount] |
+| 🛍️ **Shopping** | Souvenirs + Tips + Extras | [amount] |
+| **TOTAL** | | **₹[amount]** |
+| **REMAINING** | | **₹[{budget} - amount]** |
+
+---
+
+## 🚗 Getting Around {destination}
+
+**Best Transportation Options:**
+
+**For Short Distances (< 5 km):**
+- 🚶 Walking (free, healthy!)
+- 🛺 Auto-rickshaw: ₹[amount] average
+- 🚗 Ola/Uber: ₹[amount] average
+
+**For Medium Distances (5-15 km):**
+- 🚗 Ola/Uber: ₹[amount] average
+- 🚇 Metro (if available): ₹[amount]
+
+**For Long Distances (> 15 km):**
+- 🚗 Ola/Uber: ₹[amount] average
+- 🚕 Pre-book cab for better rates
+
+**📱 Download These Apps:**
+- **Ola Cabs:** [iOS](https://apps.apple.com/app/ola-cabs) | [Android](https://play.google.com/store/apps/details?id=com.olacabs.customer)
+- **Uber:** [iOS](https://apps.apple.com/app/uber) | [Android](https://play.google.com/store/apps/details?id=com.ubercab)
+
+**💡 Pro Tips:**
+- 📱 Book cabs 10-15 minutes in advance
+- 💵 Keep ₹500-1000 cash as backup
+- 📍 Share live location with family
+- ⏰ Peak hours (8-10 AM, 6-8 PM) = surge pricing
+
+---
+
+## 🍽️ Food Recommendations Summary
+
+**Must-Try Restaurants in {destination}:**
+
+**1. [Restaurant Name 1]**
+- **📱 [View on Zomato](https://www.google.com/search?q=Restaurant+Name+City+zomato)**
+- 🍴 Cuisine: [Type]
+- ⭐ Rating: [X.X/5]
+- 💰 Budget: ₹[amount] for 2
+- 🌟 Signature Dish: [Dish name]
+- 💡 Best Time: [Lunch/Dinner]
+
+**2. [Restaurant Name 2]**
+- **📱 [View on Zomato](https://www.google.com/search?q=Restaurant+Name+City+zomato)**
+- 🍴 Cuisine: [Type]
+- ⭐ Rating: [X.X/5]
+- 💰 Budget: ₹[amount] for 2
+- 🌟 Must-Order: [Dish name]
+- 💡 Tip: [Special advice]
+
+[Continue for 3-5 key restaurants]
+
+---
+
+## ✅ Why This New Plan Works Better
+
+**Key Improvements Over Original:**
+
+**1. [Main Change Category - e.g., Accommodation]**
+- **Before:** [What it was]
+- **Now:** [What it is]
+- **Impact:** [How this addresses their feedback]
+
+**2. [Second Category - e.g., Dining]**
+- **Before:** [Original approach]
+- **Now:** [New approach]
+- **Impact:** [Benefit to user]
+
+**3. [Third Category - e.g., Activities]**
+- **Before:** [Old plan]
+- **Now:** [Improved plan]
+- **Impact:** [Why it's better]
+
+**How This Addresses Your Feedback:**
+
+"{user_feedback}"
+
+✅ [Direct response to point 1]
+✅ [Direct response to point 2]
+✅ [Direct response to point 3]
+
+---
+
+💡 **Ready to book?** Your updated itinerary is complete with all links! Just click and book each component, or let me know if you'd like any adjustments.
+
+CRITICAL REMINDERS:
+- Every link MUST be clickable markdown format: **📱 [Text](url)**
+- NO plain text URLs anywhere
+- Use bullet points with proper indentation
+- Add emojis for visual appeal
+- Keep consistent formatting throughout
+- Make it easy to scan and read
 
 ## 🔄 What I Changed Based on Your Feedback
 
