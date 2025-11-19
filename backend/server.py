@@ -481,22 +481,33 @@ THIS IS ₹{trip_details.budget} FOR THE ENTIRE TRIP FOR ALL {trip_details.num_p
 
 Average daily budget available: ₹{trip_details.budget / trip_details.num_days:.0f} per day for all {trip_details.num_people} {people_text}
 Per person per day: ₹{trip_details.budget / (trip_details.num_days * trip_details.num_people):.0f}
-⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+⚠️⚠️⚠️⚠️ ABSOLUTE BUDGET LIMIT ⚠️⚠️⚠️⚠️
+**THE TOTAL COST OF YOUR PLAN MUST NOT EXCEED ₹{trip_details.budget}**
+**MAXIMUM ALLOWED: ₹{trip_details.budget}**
+**YOU CANNOT GO ABOVE THIS AMOUNT UNDER ANY CIRCUMSTANCES**
+
+If you calculate costs and they exceed ₹{trip_details.budget}, you MUST:
+1. Choose cheaper hotels
+2. Reduce number of paid activities
+3. Opt for budget dining options
+4. Find free or low-cost alternatives
+
+DO NOT present a plan that costs more than ₹{trip_details.budget}. This is NON-NEGOTIABLE.
+⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
 
 **CRITICAL - Budget Validation:**
 This trip has ALREADY been validated by our system. The budget of ₹{trip_details.budget} is SUFFICIENT for this {trip_details.num_days}-day trip. Your job is to plan within this budget, NOT to question whether it's enough. DO NOT add warnings about budget being insufficient or short - the system has already checked this.
 
 **CRITICAL - Budget Utilization Strategy:**
 The user has allocated ₹{trip_details.budget} as their TOTAL BUDGET for the ENTIRE {trip_details.num_days}-day trip (NOT per day, NOT per person per day - this is the COMPLETE trip budget for ALL {trip_details.num_people} {people_text}):
-- DO NOT create a minimal/bare-bones plan that only costs 40% of the budget
-- DO NOT suggest they "save money" by skipping experiences - they allocated this budget to ENJOY the trip
-- DO create a plan that utilizes 70-90% of the budget (₹{budget_min_target}-₹{budget_max_target}) to maximize their experience
-- BALANCE value and quality: Use the budget to upgrade accommodations, include premium experiences, add special activities
-- If budget tier is "moderate" or "luxury", recommend accordingly - don't give them budget options when they can afford better
-- The goal is to create the BEST POSSIBLE trip within their TOTAL budget, not the CHEAPEST possible trip
-- When showing budget breakdown, show TOTAL costs for the entire trip (not daily costs)
+- Target utilization: 85-95% of budget (₹{int(trip_details.budget * 0.85)}-₹{int(trip_details.budget * 0.95)}) to maximize experience
+- **HARD LIMIT: Your plan CANNOT exceed ₹{trip_details.budget}. Stay at or below this amount.**
+- Use the FULL budget to create the BEST possible trip - don't leave money on the table
+- Balance value and quality - upgrade hotels, add premium experiences, include special activities
+- When showing budget breakdown, the TOTAL should be close to ₹{trip_details.budget} (aim for 90%+)
+- If you're only using 60-70%, you're not utilizing the budget well - add better experiences!
 
-Example: If total budget is ₹80,000 for 5 days, aim for ₹56,000-72,000 total cost with great hotels, memorable activities, and excellent dining - not a ₹32,000 basic plan.
+Example: If total budget is ₹30,000 for 5 days, your plan should cost ₹27,000-₹28,500 (use almost the full budget for a great trip!).
 
 ═══════════════════════════════════════════════════════════════════════════════
 🎯 RESPONSE QUALITY STANDARDS - FOLLOW STRICTLY 🎯
@@ -2061,8 +2072,19 @@ You are a friendly travel assistant helping someone plan their trip. Extract tri
 USER MESSAGE: "{request.prompt}"
 {context_text}
 
+**CRITICAL - CONVERSATION CONTEXT AWARENESS:**
+{f"This is a FOLLOW-UP message. The user is providing MISSING information that we asked for." if request.previous_extraction else "This is a NEW trip planning request."}
+
 **EXTRACTION GUIDELINES:**
 Be smart and conversational in understanding:
+
+{"**SPECIAL RULE FOR FOLLOW-UP MESSAGES:**" if request.previous_extraction else ""}
+{"If the user's message is SHORT (1-5 words) or provides ONLY ONE piece of information (like 'from Mumbai', '5 days', '50000 rupees'), it means they are ANSWERING a specific question we asked. In this case:" if request.previous_extraction else ""}
+{"- Extract ONLY the new information provided" if request.previous_extraction else ""}
+{"- Keep ALL existing values unchanged" if request.previous_extraction else ""}
+{"- DO NOT set anything to 'Not specified' or 0 if it was already provided" if request.previous_extraction else ""}
+{"- Example: User already said 'Goa trip' (destination=Goa), now says 'from Mumbai' → Keep destination='Goa', update origin_city='Mumbai'" if request.previous_extraction else ""}
+{""  if request.previous_extraction else ""}
 
 1. **Origin City**: Where they're traveling FROM
    - Look for: "from [city]", "leaving from", "starting in", "I'm in [city]"
@@ -2167,22 +2189,32 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
         # Merge with previous extraction if available
         if request.previous_extraction:
             print("🔄 Merging with previous extraction...")
+            print(f"   New extraction: {trip_details}")
+            
             # Only update fields that are NOT "Not specified" or 0 in new extraction
             if trip_details.origin_city.lower() in ["not specified", "unknown", "n/a", ""] and request.previous_extraction.get('origin_city'):
                 trip_details.origin_city = request.previous_extraction.get('origin_city')
                 print(f"  ✓ Kept origin_city: {trip_details.origin_city}")
+            else:
+                print(f"  ✓ Updated/kept origin_city: {trip_details.origin_city}")
             
             if trip_details.destination.lower() in ["not specified", "unknown", "n/a", ""] and request.previous_extraction.get('destination'):
                 trip_details.destination = request.previous_extraction.get('destination')
                 print(f"  ✓ Kept destination: {trip_details.destination}")
+            else:
+                print(f"  ✓ Updated/kept destination: {trip_details.destination}")
             
             if (not trip_details.num_days or trip_details.num_days <= 0) and request.previous_extraction.get('num_days'):
                 trip_details.num_days = request.previous_extraction.get('num_days')
                 print(f"  ✓ Kept num_days: {trip_details.num_days}")
+            else:
+                print(f"  ✓ Updated/kept num_days: {trip_details.num_days}")
             
             if (not trip_details.num_people or trip_details.num_people <= 0) and request.previous_extraction.get('num_people'):
                 trip_details.num_people = request.previous_extraction.get('num_people')
                 print(f"  ✓ Kept num_people: {trip_details.num_people}")
+            else:
+                print(f"  ✓ Updated/kept num_people: {trip_details.num_people}")
             
             if (not trip_details.budget or trip_details.budget <= 0) and request.previous_extraction.get('budget'):
                 # OLD budget from previous extraction
@@ -2207,10 +2239,20 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
                     # Budget increased - we'll use the new budget and re-validate
                 else:
                     print(f"  💰 Budget changed: {old_budget} → {new_budget}")
+            else:
+                print(f"  ✓ Updated/kept budget: {trip_details.budget}")
             
             if not trip_details.interests and request.previous_extraction.get('interests'):
                 trip_details.interests = request.previous_extraction.get('interests')
                 print(f"  ✓ Kept interests: {trip_details.interests}")
+            else:
+                print(f"  ✓ Updated/kept interests: {trip_details.interests}")
+            
+            if not trip_details.start_date and request.previous_extraction.get('start_date'):
+                trip_details.start_date = request.previous_extraction.get('start_date')
+                print(f"  ✓ Kept start_date: {trip_details.start_date}")
+            else:
+                print(f"  ✓ Updated/kept start_date: {trip_details.start_date}")
             
             print(f"🔄 After merge: {trip_details}")
         
@@ -2248,6 +2290,12 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
             follow_up_questions.append("**What's your total budget?** (e.g., ₹50,000, budget-friendly, comfortable)")
             print("🔍 DEBUG: Added 'budget' to missing_fields")
         
+        # Check start date (optional but helpful)
+        if not trip_details.start_date:
+            missing_fields.append("start date")
+            follow_up_questions.append("**When do you want to start your trip?** (e.g., December 25, next week, 15/12/2025)")
+            print("🔍 DEBUG: Added 'start date' to missing_fields")
+        
         print(f"🔍 DEBUG: Total missing_fields = {missing_fields}")
         
         # If any required fields are missing, respond conversationally
@@ -2265,6 +2313,8 @@ Now extract from the user's message above. Fill in what you can infer, use sensi
                 current_info.append(f"✓ Travelers: {trip_details.num_people} people")
             if trip_details.budget and trip_details.budget > 0:
                 current_info.append(f"✓ Budget: ₹{trip_details.budget}")
+            if trip_details.start_date:
+                current_info.append(f"✓ Start Date: {trip_details.start_date}")
             
             response_text = "Great! I'm getting a sense of your trip. Let me gather a few more details:\n\n"
             
