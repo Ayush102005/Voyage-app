@@ -137,10 +137,10 @@ const HomePage = () => {
               { emoji: "✨", title: "AI Crafts Your Plan", desc: "Our intelligent system creates a personalized itinerary" },
               { emoji: "📅", title: "Enjoy Your Journey", desc: "Get a complete day-by-day plan with bookings and insights" }
             ].map((step, i) => (
-              <div key={i} className="card text-center group hover:shadow-xl hover:shadow-[#57A5B8]/20">
+              <div key={i} className="card text-center group hover:shadow-xl hover:shadow-[#57A5B8]/20 flex flex-col h-full">
                 <div className="text-6xl mb-6">{step.emoji}</div>
                 <h3 className="text-xl font-bold mb-3">{step.title}</h3>
-                <p className="text-neutral-400">{step.desc}</p>
+                <p className="text-neutral-400 flex-grow">{step.desc}</p>
               </div>
             ))}
           </div>
