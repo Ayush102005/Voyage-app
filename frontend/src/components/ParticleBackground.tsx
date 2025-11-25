@@ -31,16 +31,16 @@ const ParticleBackground = () => {
     window.addEventListener('resize', resizeCanvas)
 
     // Initialize particles
-    const particleCount = 100
-    const colors = ['#14b8a6', '#0d9488', '#06b6d4', '#0891b2', '#6366f1']
+    const particleCount = 250
+    const colors = ['#5eead4', '#2dd4bf', '#22d3ee', '#38bdf8', '#818cf8', '#a78bfa']
 
     for (let i = 0; i < particleCount; i++) {
       particlesRef.current.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.5,
-        vy: (Math.random() - 0.5) * 0.5,
-        radius: Math.random() * 2 + 1,
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: (Math.random() - 0.5) * 1.2,
+        radius: Math.random() * 2.5 + 1,
         color: colors[Math.floor(Math.random() * colors.length)]
       })
     }
@@ -58,9 +58,13 @@ const ParticleBackground = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
       particlesRef.current.forEach((particle, i) => {
-        // Update position
+        // Continuous movement - always moving
         particle.x += particle.vx
         particle.y += particle.vy
+
+        // Add slight random movement for constant motion
+        particle.vx += (Math.random() - 0.5) * 0.05
+        particle.vy += (Math.random() - 0.5) * 0.05
 
         // Mouse interaction
         const dx = mouseRef.current.x - particle.x
@@ -71,21 +75,38 @@ const ParticleBackground = () => {
         if (distance < maxDistance) {
           const force = (maxDistance - distance) / maxDistance
           const angle = Math.atan2(dy, dx)
-          particle.vx -= Math.cos(angle) * force * 0.2
-          particle.vy -= Math.sin(angle) * force * 0.2
+          particle.vx -= Math.cos(angle) * force * 0.3
+          particle.vy -= Math.sin(angle) * force * 0.3
         }
 
-        // Add slight gravitational pull back to original area
-        particle.vx *= 0.98
-        particle.vy *= 0.98
+        // Keep velocity in reasonable range for continuous motion
+        const maxSpeed = 2
+        const speed = Math.sqrt(particle.vx * particle.vx + particle.vy * particle.vy)
+        if (speed > maxSpeed) {
+          particle.vx = (particle.vx / speed) * maxSpeed
+          particle.vy = (particle.vy / speed) * maxSpeed
+        }
+        
+        // Minimum speed to ensure constant movement
+        const minSpeed = 0.3
+        if (speed < minSpeed) {
+          particle.vx = (Math.random() - 0.5) * 0.6
+          particle.vy = (Math.random() - 0.5) * 0.6
+        }
 
-        // Boundary check
-        if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1
-        if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1
+        // Slight friction but maintain movement
+        particle.vx *= 0.99
+        particle.vy *= 0.99
 
-        // Keep within bounds
-        particle.x = Math.max(0, Math.min(canvas.width, particle.x))
-        particle.y = Math.max(0, Math.min(canvas.height, particle.y))
+        // Boundary check - bounce off walls
+        if (particle.x < 0 || particle.x > canvas.width) {
+          particle.vx *= -1
+          particle.x = Math.max(0, Math.min(canvas.width, particle.x))
+        }
+        if (particle.y < 0 || particle.y > canvas.height) {
+          particle.vy *= -1
+          particle.y = Math.max(0, Math.min(canvas.height, particle.y))
+        }
 
         // Draw particle
         ctx.beginPath()
@@ -103,7 +124,7 @@ const ParticleBackground = () => {
             ctx.beginPath()
             ctx.moveTo(particle.x, particle.y)
             ctx.lineTo(otherParticle.x, otherParticle.y)
-            ctx.strokeStyle = `rgba(20, 184, 166, ${(1 - distance / 100) * 0.2})`
+            ctx.strokeStyle = `rgba(94, 234, 212, ${(1 - distance / 100) * 0.3})`
             ctx.lineWidth = 0.5
             ctx.stroke()
           }
@@ -129,7 +150,7 @@ const ParticleBackground = () => {
     <canvas
       ref={canvasRef}
       className="fixed inset-0 pointer-events-none z-0"
-      style={{ opacity: 0.4 }}
+      style={{ opacity: 0.5 }}
     />
   )
 }
