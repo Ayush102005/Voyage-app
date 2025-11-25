@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import ParticleBackground from '../components/ParticleBackground'
 
 const HomePage = () => {
   const navigate = useNavigate()
@@ -41,12 +42,17 @@ const HomePage = () => {
   ]
 
   return (
-    <div className="min-h-screen bg-black">
-      {/* Navbar */}
-      <nav className="fixed top-0 w-full bg-black/80 backdrop-blur-lg border-b border-neutral-800 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
+    <div className="min-h-screen bg-black relative">
+      {/* Animated Particle Background */}
+      <ParticleBackground />
+      
+      {/* Content */}
+      <div className="relative z-10">
+        {/* Navbar */}
+        <nav className="fixed top-0 w-full bg-black/80 backdrop-blur-lg border-b border-neutral-800 z-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <div className="flex items-center gap-2">
               <span className="text-3xl">✈️</span>
               <span className="text-2xl font-bold gradient-text">Voyage</span>
             </div>
@@ -393,6 +399,7 @@ const HomePage = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

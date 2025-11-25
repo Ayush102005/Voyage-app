@@ -5,6 +5,7 @@ import { signOut } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import toast from 'react-hot-toast'
 import NotificationBell from '../components/NotificationBell'
+import ParticleBackground from '../components/ParticleBackground'
 
 const DashboardPage = () => {
   const navigate = useNavigate()
@@ -441,25 +442,30 @@ const DashboardPage = () => {
   }
 
   return (
-    <div className="h-screen bg-black flex overflow-hidden">
-      {/* Mobile Menu Overlay */}
-      {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
+    <div className="h-screen bg-black flex overflow-hidden relative">
+      {/* Animated Particle Background */}
+      <ParticleBackground />
       
-      {/* Sidebar - Hidden on mobile, slide in when menu open */}
-      <aside className={`
-        fixed lg:relative inset-y-0 left-0 z-50
-        w-80 bg-neutral-900 border-r border-neutral-800 
-        flex flex-col overflow-y-auto
-        transform transition-transform duration-300 ease-in-out
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        <div className="p-6 border-b border-neutral-800 flex-shrink-0">
-          <div className="flex items-center justify-between">
+      {/* Content */}
+      <div className="relative z-10 flex w-full h-full">
+        {/* Mobile Menu Overlay */}
+        {isMobileMenuOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+        
+        {/* Sidebar - Hidden on mobile, slide in when menu open */}
+        <aside className={`
+          fixed lg:relative inset-y-0 left-0 z-50
+          w-80 bg-neutral-900/90 backdrop-blur-lg border-r border-neutral-800 
+          flex flex-col overflow-y-auto
+          transform transition-transform duration-300 ease-in-out
+          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}>
+          <div className="p-6 border-b border-neutral-800 flex-shrink-0">
+            <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-3xl">✈️</span>
               <span className="text-2xl font-bold gradient-text">Voyage</span>
@@ -1364,6 +1370,7 @@ const DashboardPage = () => {
         )}
 
       </main>
+      </div>
     </div>
   )
 }
